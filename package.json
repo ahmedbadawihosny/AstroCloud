@@ -1,0 +1,24 @@
+{
+  "name": "file-sharing-app",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm -r --parallel run dev",
+    "dev:services": "concurrently -n gateway,auth,file,notif \"pnpm run dev:gateway\" \"pnpm run dev:auth\" \"pnpm run dev:file\" \"pnpm run dev:notification\"",
+    "dev:gateway": "pnpm --filter api-gateway run dev",
+    "dev:auth": "pnpm --filter auth-service run dev",
+    "dev:file": "pnpm --filter file-service run dev",
+    "dev:notification": "pnpm --filter notification-service run dev",
+    "dev:frontend": "pnpm --filter frontend run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1"
+  }
+}
