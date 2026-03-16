@@ -2,7 +2,7 @@
   "name": "auth-service",
   "version": "0.0.1",
   "scripts": {
-    "build": "nest build",
+    "build": "pnpm --filter @file-sharing-app/common build && nest build",
     "dev": "nest start --watch",
     "start": "nest start"
   },
