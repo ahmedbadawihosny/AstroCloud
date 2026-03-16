@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigModule } from '@nestjs/config';
 import { NatsModule } from '@file-sharing-app/common';
 import { FilesModule } from './files/files.module';
 import { ShareModule } from './share/share.module';
@@ -7,13 +8,15 @@ import { FilesHealthController } from './health.controller';
 
 @Module({
   imports: [
-    MongooseModule.forRoot(
-      process.env.MONGO_URI ?? process.env.MONGODB_URI ?? 'mongodb://localhost:27017/file_db',
-    ),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    MongooseModule.forRoot(process.env.MONGODB_URI as string),
     NatsModule,
     FilesModule,
     ShareModule,
   ],
   controllers: [FilesHealthController],
 })
-export class AppModule {}
+export class AppModule { }

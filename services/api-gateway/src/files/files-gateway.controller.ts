@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Req, Res, UseGuards } from 
 import { Response } from 'express';
 import { FilesGatewayService } from './files-gateway.service';
 import { JwtGuard } from '../common/guards/jwt.guard';
+import { ShareFileDto } from './dto/file-requests.dto';
 
 @Controller('files')
 @UseGuards(JwtGuard)
@@ -43,7 +44,7 @@ export class FilesGatewayController {
   @Post(':id/share')
   async share(
     @Param('id') id: string,
-    @Body() body: { expiresInSeconds: number },
+    @Body() body: ShareFileDto,
     @Req() req: any,
     @Res() res: Response,
   ) {
