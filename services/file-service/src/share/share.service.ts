@@ -10,7 +10,7 @@ import { Model, Types } from 'mongoose';
 import { NatsClient, EVENTS } from '@file-sharing-app/common';
 import { ShareLink, ShareLinkDocument } from './share-link.schema';
 import { File, FileDocument } from '../files/file.schema';
-import { STORAGE_PROVIDER, StorageProvider } from '../storage/storage.interface';
+import { STORAGE_PROVIDER, StorageProvider } from '../storage';
 
 function sha256(s: string): string {
   return createHash('sha256').update(s).digest('hex');
