@@ -18,5 +18,4 @@ FROM base AS runner
 COPY --from=builder /app/services/auth-service/dist ./dist
 COPY --from=builder /app/services/auth-service/package.json ./
 RUN pnpm install --prod
-EXPOSE 3001
 CMD ["node", "dist/main.js"]

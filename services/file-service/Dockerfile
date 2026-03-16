@@ -18,5 +18,4 @@ FROM base AS runner
 COPY --from=builder /app/services/file-service/dist ./dist
 COPY --from=builder /app/services/file-service/package.json ./
 RUN pnpm install --prod
-EXPOSE 3002
 CMD ["node", "dist/main.js"]
