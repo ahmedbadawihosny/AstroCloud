@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
 import { NatsClient, EVENTS } from '@file-sharing-app/common';
 import { File, FileDocument } from './file.schema';
-import { STORAGE_PROVIDER, StorageProvider } from '../storage';
+import { STORAGE_PROVIDER, StorageProvider } from '../storage/storage.interface';
 import { ShareService } from '../share/share.service';
 
 @Injectable()

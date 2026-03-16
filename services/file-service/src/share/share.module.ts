@@ -4,7 +4,7 @@ import { ShareLink, ShareLinkSchema } from './share-link.schema';
 import { File, FileSchema } from '../files/file.schema';
 import { ShareController } from './share.controller';
 import { ShareService } from './share.service';
-import { StorageModule } from '../storage';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
