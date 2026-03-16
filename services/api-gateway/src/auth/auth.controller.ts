@@ -71,6 +71,7 @@ export class AuthGatewayController {
     status: 409,
     description: 'Conflict - User already exists',
   })
+  @ApiBody({ type: RegisterDto })
   @Post('register')
   register(
     @Body() dto: RegisterDto,
@@ -109,6 +110,7 @@ export class AuthGatewayController {
     status: 404,
     description: 'User not found',
   })
+  @ApiBody({ type: VerifyEmailDto })
   @Post('verify-email')
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto);
@@ -215,6 +217,7 @@ export class AuthGatewayController {
     status: 400,
     description: 'Bad request - Invalid input data',
   })
+  @ApiBody({ type: LoginDto })
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -369,6 +372,7 @@ export class AuthGatewayController {
     status: 404,
     description: 'User not found',
   })
+  @ApiBody({ type: RequestResetPasswordDto })
   @Post('request-reset-password')
   requestResetPassword(@Body() dto: RequestResetPasswordDto) {
     return this.authService.requestResetPassword(dto);
@@ -396,6 +400,7 @@ export class AuthGatewayController {
     status: 400,
     description: 'Bad request - Invalid reset code',
   })
+  @ApiBody({ type: VerifyResetCodeDto })
   @Post('verify-reset-code')
   async verifyResetCode(
     @Body() dto: VerifyResetCodeDto,
@@ -435,6 +440,7 @@ export class AuthGatewayController {
     status: 400,
     description: 'Bad request - Invalid reset token or new password',
   })
+  @ApiBody({ type: ResetPasswordDto })
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto, @Req() request: Request) {
     const resetToken = request.cookies?.resetToken;

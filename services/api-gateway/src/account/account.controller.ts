@@ -22,7 +22,7 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { firstValueFrom } from 'rxjs';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
-@ApiTags('Account Management')
+@ApiTags('Account')
 @ApiBearerAuth()
 @Controller('api/v1/account')
 @UseGuards(JwtAuthGuard)

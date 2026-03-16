@@ -15,7 +15,7 @@ function unreachableResponse(serviceName: string) {
   };
 }
 
-@ApiTags('Gateway')
+@ApiTags('Health')
 @Controller('api/v1')
 export class AppController {
   constructor(@Inject('NATS_SERVICE') private natsClient: ClientProxy) {}

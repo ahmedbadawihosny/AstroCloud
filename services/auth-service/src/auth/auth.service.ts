@@ -81,9 +81,9 @@ export class AuthService {
   // ========== Register Flow Services ==========
 
   async register(dto: RegisterDto) {
-    const existing = await this.userModel
-      .findOne({ email: dto.email.toLowerCase() })
-      .exec();
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    const existing = await this.userModel.findOne({ email: normalizedEmail }).exec();
     if (existing) {
       throw new RpcException({
         statusCode: 400,
@@ -92,52 +92,69 @@ export class AuthService {
       });
     }
 
-    const user = new this.userModel({
-      name: dto.name,
-      email: dto.email,
-      password: dto.password,
-      role: Role.PENDING,
-      isVerified: false,
-      isActive: true,
-    });
-    await user.save();
-
     try {
-      await this.nats.publish(EVENTS.USER_CREATED, {
-        userId: user._id.toString(),
-        email: user.email,
-        createdAt: new Date().toISOString(),
+      const user = new this.userModel({
+        name: dto.name,
+        email: normalizedEmail,
+        password: dto.password,
+        role: Role.PENDING,
+        isVerified: false,
+        isActive: true,
       });
-    } catch (err) {
-      console.warn('[AuthService] user_created publish failed:', err);
+      await user.save();
+
+      try {
+        await this.nats.publish(EVENTS.USER_CREATED, {
+          userId: user._id.toString(),
+          email: user.email,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('[AuthService] user_created publish failed:', err);
+      }
+
+      const account = new this.accountModel({
+        userId: user._id,
+        provider: ProviderEnum.EMAIL,
+        providerId: normalizedEmail,
+      });
+      await account.save();
+
+      const verificationCode = Math.floor(
+        100000 + Math.random() * 900000,
+      ).toString();
+
+      await this.emailVerificationModel.create({
+        email: normalizedEmail,
+        verificationCode,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      });
+
+      await this.notificationService.sendEmailVerification({
+        email: normalizedEmail,
+        name: dto.name,
+        code: verificationCode,
+      });
+
+      return {
+        message: 'User registered successfully, verification code sent',
+      };
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        // Mongo duplicate key safety net
+        throw new RpcException({
+          statusCode: 400,
+          message: 'Email already exists',
+          error: 'Bad Request',
+        });
+      }
+
+      throw new RpcException({
+        statusCode: 500,
+        message: 'Internal server error',
+        error: 'Error',
+      });
     }
-
-    const account = new this.accountModel({
-      userId: user._id,
-      provider: ProviderEnum.EMAIL,
-      providerId: dto.email,
-    });
-    await account.save();
-
-    const verificationCode = Math.floor(
-      100000 + Math.random() * 900000,
-    ).toString();
-
-    await this.emailVerificationModel.create({
-      email: dto.email,
-      verificationCode,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-    });
-
-    await this.notificationService.sendEmailVerification({
-      email: dto.email,
-      name: dto.name,
-      code: verificationCode,
-    });
-
-    return {
-      message: 'User registered successfully, verification code sent',
-    };
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
