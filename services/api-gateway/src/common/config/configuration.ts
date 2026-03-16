@@ -7,6 +7,8 @@ export default () => ({
   // NATS_PASSWORD: process.env.NATS_PASSWORD,
   FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN,
   AI_ORIGIN: process.env.AI_ORIGIN,
+  SWAGGER_LOCAL: process.env.SWAGGER_LOCAL,
+  SWAGGER_PRODUCTION: process.env.SWAGGER_PRODUCTION,
 
   //! =========== Security Layer===========
   // Rate limiting

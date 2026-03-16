@@ -30,12 +30,14 @@ async function bootstrap() {
         .filter((o) => o.length > 0)
       : [];
 
-  const origins =
-    parsedOrigins.length > 0
-      ? parsedOrigins
-      : [configuration().FRONTEND_ORIGIN].filter(
-        (o): o is string => typeof o === 'string' && o.length > 0,
-      );
+  const origins = [
+    ...parsedOrigins,
+    configuration().SWAGGER_LOCAL,
+    configuration().SWAGGER_PRODUCTION,
+    configuration().FRONTEND_ORIGIN
+  ].filter(
+    (o): o is string => typeof o === 'string' && o.length > 0,
+  );
 
   app.enableCors({
     origin: origins,
