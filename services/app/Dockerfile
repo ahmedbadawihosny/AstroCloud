@@ -17,7 +17,7 @@ RUN pnpm install --no-frozen-lockfile
 COPY . .
 
 # Build the application
-RUN pnpm run build
+RUN pnpm exec nest build
 
 # Production stage
 FROM node:18-alpine AS production
