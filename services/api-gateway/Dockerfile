@@ -18,5 +18,5 @@ FROM base AS runner
 COPY --from=builder /app/services/api-gateway/dist ./dist
 COPY --from=builder /app/services/api-gateway/package.json ./
 RUN pnpm install --prod
-EXPOSE 3000
+EXPOSE 4000
 CMD ["node", "dist/main.js"]

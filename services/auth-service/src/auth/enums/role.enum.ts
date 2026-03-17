@@ -1,5 +1,1 @@
-export enum Role {
-  PENDING = 'PENDING',
-  STUDENT_USER = 'STUDENT_USER',
-  INSTRUCTOR_USER = 'INSTRUCTOR_USER',
-}
+//

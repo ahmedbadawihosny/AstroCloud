@@ -5,15 +5,14 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { StorageProvider } from './storage.interface';
 
 export interface S3StorageOptions {
-  endpoint: string;
   region: string;
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
-  forcePathStyle?: boolean;
 }
 
 @Injectable()
@@ -23,13 +22,8 @@ export class S3StorageProvider implements StorageProvider {
 
   constructor(options: S3StorageOptions) {
     this.bucket = options.bucket;
-    const hasCustomEndpoint = Boolean(options.endpoint?.trim());
     this.client = new S3Client({
       region: options.region || 'us-east-1',
-      ...(hasCustomEndpoint && {
-        endpoint: options.endpoint,
-        forcePathStyle: options.forcePathStyle ?? true,
-      }),
       credentials: {
         accessKeyId: options.accessKeyId,
         secretAccessKey: options.secretAccessKey,
@@ -59,6 +53,17 @@ export class S3StorageProvider implements StorageProvider {
     const body = response.Body ? Buffer.from(await response.Body.transformToByteArray()) : Buffer.alloc(0);
     const contentType = (response.ContentType as string) || 'application/octet-stream';
     return { body, contentType };
+  }
+
+  async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+      { expiresIn: expiresInSeconds },
+    );
   }
 
   async getObjectStream(key: string): Promise<import('stream').Readable> {

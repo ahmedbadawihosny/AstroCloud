@@ -12,6 +12,39 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags
 export class FilesGatewayController {
   constructor(private readonly filesGatewayService: FilesGatewayService) {}
 
+   /** Resolve current user id from req.user (id, sub, or _id) so upload and sessions use the same value. */
+   private getCurrentUserId(req: unknown): string | undefined {
+    const r = req as
+      | { user?: { _id?: unknown; id?: unknown; sub?: unknown } }
+      | undefined;
+    const raw = r?.user?.id ?? r?.user?.sub ?? r?.user?._id;
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'string') return raw.trim() || undefined;
+    if (typeof raw === 'object' && raw !== null) {
+      // Prefer Mongo ObjectId-style conversions when available.
+      const maybeHex = (raw as { toHexString?: () => string }).toHexString?.();
+      if (typeof maybeHex === 'string' && maybeHex.trim())
+        return maybeHex.trim();
+
+      const s = (raw as { toString?: () => string }).toString?.();
+      if (typeof s === 'string') {
+        const trimmed = s.trim();
+        if (trimmed && trimmed !== '[object Object]') return trimmed;
+      }
+      // Avoid returning "[object Object]" for arbitrary objects
+      return undefined;
+    }
+    if (
+      typeof raw === 'number' ||
+      typeof raw === 'boolean' ||
+      typeof raw === 'bigint' ||
+      typeof raw === 'symbol'
+    ) {
+      return String(raw).trim() || undefined;
+    }
+    return undefined;
+  }
+
   @Post('upload')
   @ApiOperation({
     summary: 'Upload a file',
@@ -36,7 +69,7 @@ export class FilesGatewayController {
   })
   @ApiResponse({ status: 200, description: 'File uploaded successfully' })
   async upload(@Req() req: any, @Res() res: Response) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?._id;
+    const userId = this.getCurrentUserId(req);
     const result = await this.filesGatewayService.upload({
       userId: String(userId),
       file: req.body?.file ?? req.file,
@@ -52,7 +85,7 @@ export class FilesGatewayController {
   })
   @ApiResponse({ status: 200, description: 'Files listed successfully' })
   async list(@Req() req: any, @Res() res: Response) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?._id;
+    const userId = this.getCurrentUserId(req);
     const result = await this.filesGatewayService.list(String(userId));
     return res.status(200).json(result);
   }
@@ -66,7 +99,7 @@ export class FilesGatewayController {
   @ApiResponse({ status: 200, description: 'File retrieved successfully' })
   @ApiResponse({ status: 404, description: 'File not found' })
   async get(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?._id;
+    const userId = this.getCurrentUserId(req);
     const result = await this.filesGatewayService.get({ userId: String(userId), fileId: id });
     return res.status(200).json(result);
   }
@@ -79,7 +112,7 @@ export class FilesGatewayController {
   @ApiResponse({ status: 200, description: 'File deleted successfully' })
   @ApiResponse({ status: 404, description: 'File not found' })
   async delete(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?._id;
+    const userId = this.getCurrentUserId(req);
     const result = await this.filesGatewayService.delete({ userId: String(userId), fileId: id });
     return res.status(200).json(result);
   }
@@ -97,7 +130,7 @@ export class FilesGatewayController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?._id;
+    const userId = this.getCurrentUserId(req);
     const result = await this.filesGatewayService.share({
       userId: String(userId),
       fileId: id,

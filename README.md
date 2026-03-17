@@ -27,7 +27,6 @@ file-sharing-app/
   infra/
     nats/                  # NATS notes
     mongodb/               # MongoDB notes
-    minio/                 # MinIO (S3-compatible) notes
   packages/
     common/                # shared: event contracts, NATS client, auth utils, DTOs, filters, interceptors
       src/
@@ -53,8 +52,8 @@ file-sharing-app/
 ## Design Decisions
 
 - **Auth**: JWT access token (short TTL); optional refresh token. Passwords hashed with bcrypt.
-- **File storage**: **S3 only** (AWS S3 or MinIO). Configure via `.env`: `FILE_S3_ENDPOINT`, `FILE_S3_BUCKET`, `FILE_S3_ACCESS_KEY`, `FILE_S3_SECRET_KEY` (leave endpoint empty for AWS S3).
-- **Share links**: signed random token stored **hashed** in DB + expiry. Download via message pattern; gateway streams response.
+- **File storage**: **S3 only** (AWS S3). Configure via `.env`: `FILE_S3_BUCKET`, `FILE_S3_ACCESS_KEY`, `FILE_S3_SECRET_KEY`, plus `FILE_S3_REGION`.
+- **Share links**: signed random token stored **hashed** in DB + expiry. Download resolves to a short-lived pre-signed S3 URL.
 - **Security**: All file access via File Service; storage is private (no public buckets).
 - **Gateway ↔ services**: NATS message patterns only; no HTTP calls from gateway to backend services.
 - **Rate limiting**: API Gateway throttler per route.
@@ -105,12 +104,10 @@ File storage is **S3 only**. In `.env`:
 
 | Variable | Description |
 |----------|-------------|
-| `FILE_S3_ENDPOINT` | S3 endpoint (e.g. `http://minio:9000` for MinIO). Leave empty for AWS S3. |
 | `FILE_S3_REGION` | Region (default `us-east-1`). |
 | `FILE_S3_BUCKET` | Bucket name. |
 | `FILE_S3_ACCESS_KEY` | Access key. |
 | `FILE_S3_SECRET_KEY` | Secret key. |
-| `FILE_S3_FORCE_PATH_STYLE` | Set `true` for MinIO. |
 
 ## Setup
 
@@ -129,24 +126,24 @@ File storage is **S3 only**. In `.env`:
 
 4. **Run infrastructure only**:
    ```bash
-   docker-compose up -d nats mongodb-auth mongodb-file minio
+   docker-compose up -d nats mongodb-auth mongodb-file
    ```
 
 5. **Run services locally** (separate terminals or use root `pnpm run dev`):
    ```bash
-   pnpm run dev:gateway       # API at :3000 — ensure no other process uses port 3000
+   pnpm run dev:gateway       # API at :4000 — ensure no other process uses port 4000
    pnpm run dev:auth          # needs MongoDB
    pnpm run dev:file          # needs MongoDB
    pnpm run dev:notification  # NATS only
    pnpm run dev:frontend      # :5173
    ```
-   **Troubleshooting**: If you see `ECONNREFUSED ::1:27017`, start MongoDB or set `MONGODB_URI` in `services/auth-service/.env` and `services/file-service/.env`. If you see `EADDRINUSE :::3000`, stop any process already using port 3000.
+   **Troubleshooting**: If you see `ECONNREFUSED ::1:27017`, start MongoDB or set `MONGODB_URI` in `services/auth-service/.env` and `services/file-service/.env`. If you see `EADDRINUSE :::4000`, stop any process already using port 4000.
 
 6. **Run everything with Docker**:
    ```bash
    docker-compose up --build
    ```
-   Gateway: http://localhost:3000; frontend dev server can proxy to it.
+   Gateway: http://localhost:4000; frontend dev server can proxy to it.
 
 ## Scripts (root)
 

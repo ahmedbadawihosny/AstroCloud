@@ -20,7 +20,6 @@ export class PasswordReset {
   @Prop({
     required: true,
     default: () => new Date(Date.now() + 15 * 60 * 1000),
-    index: { expireAfterSeconds: 0 },
   })
   expiresAt: Date;
 

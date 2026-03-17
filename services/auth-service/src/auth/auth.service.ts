@@ -35,7 +35,6 @@ import {
   PasswordResetDocument,
 } from './schema/passwordReset.schema';
 import { ProviderEnum } from './enums/provider.enum';
-import { Role } from './enums/role.enum';
 import { NotificationService } from '../notification/notification.service';
 import { NatsClient } from '@file-sharing-app/common';
 import { EVENTS } from '@file-sharing-app/common';
@@ -58,15 +57,15 @@ export class AuthService {
     @Inject(forwardRef(() => WaitlistService))
     private readonly waitlistService: WaitlistService,
     private readonly notificationService: NotificationService,
-  ) {}
+  ) { }
 
   // ========== Helpers ==========
 
-  private signAccessToken(userId: string, role: Role | string) {
+  private signAccessToken(userId: string, role: string) {
     return this.jwtService.sign({ userId, role });
   }
 
-  private signRefreshToken(userId: string, role: Role | string) {
+  private signRefreshToken(userId: string, role: string) {
     return this.jwtService.sign(
       { userId, role, type: 'refresh' },
       {
@@ -97,7 +96,7 @@ export class AuthService {
         name: dto.name,
         email: normalizedEmail,
         password: dto.password,
-        role: Role.PENDING,
+        role: 'PENDING',
         isVerified: false,
         isActive: true,
       });

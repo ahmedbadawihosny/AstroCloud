@@ -7,6 +7,7 @@ import {
 import { createHash, randomBytes } from 'crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import configuration from '../common/config/configuration';
 import { NatsClient, EVENTS } from '@file-sharing-app/common';
 import { ShareLink, ShareLinkDocument } from './share-link.schema';
 import { File, FileDocument } from '../files/file.schema';
@@ -19,9 +20,9 @@ function sha256(s: string): string {
 @Injectable()
 export class ShareService {
   constructor(
-    @InjectModel(ShareLink.name) private shareModel: Model<ShareLinkDocument>,
-    @InjectModel(File.name) private fileModel: Model<FileDocument>,
-    @Inject(STORAGE_PROVIDER) private storage: StorageProvider,
+    @InjectModel(ShareLink.name) private readonly shareModel: Model<ShareLinkDocument>,
+    @InjectModel(File.name) private readonly fileModel: Model<FileDocument>,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly nats: NatsClient,
   ) {}
 
@@ -33,7 +34,9 @@ export class ShareService {
     const file = await this.fileModel.findById(fileId).exec();
     if (!file) throw new NotFoundException('File not found');
     if (file.deletedAt) throw new NotFoundException('File not found');
-    if (file.userId.toString() !== userId) throw new ForbiddenException('Not the file owner');
+    if (file.userId.toString() !== userId) {
+      throw new ForbiddenException('Not the file owner');
+    }
 
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
@@ -69,21 +72,43 @@ export class ShareService {
   }
 
   async download(token: string): Promise<{
-    contentType?: string;
-    contentDisposition?: string;
-    body?: string;
-    encoding?: string;
+    message: string;
+    data: {
+      fileId: string;
+      originalName: string;
+      downloadUrl: string;
+      downloadUrlExpiresAt: string;
+      shareExpiresAt: string;
+    };
   }> {
     const share = await this.resolveToken(token);
     const file = await this.fileModel.findById(share.fileId).exec();
     if (!file || file.deletedAt) throw new NotFoundException('File not found');
 
-    const { body, contentType } = await this.storage.get(file.storageKey);
+    const remainingSeconds = Math.max(
+      60,
+      Math.floor((share.expiresAt.getTime() - Date.now()) / 1000),
+    );
+    const downloadExpiresInSeconds = Math.min(
+      remainingSeconds,
+      configuration().FILES.SHARE_DOWNLOAD_URL_EXPIRES_IN_SECONDS,
+    );
+    const downloadUrl = await this.storage.getSignedUrl(
+      file.storageKey,
+      downloadExpiresInSeconds,
+    );
+
     return {
-      contentType: contentType || 'application/octet-stream',
-      contentDisposition: `attachment; filename="${file.originalName}"`,
-      body: body.toString('base64'),
-      encoding: 'base64',
+      message: 'Share download link resolved',
+      data: {
+        fileId: file._id.toString(),
+        originalName: file.originalName,
+        downloadUrl,
+        downloadUrlExpiresAt: new Date(
+          Date.now() + downloadExpiresInSeconds * 1000,
+        ).toISOString(),
+        shareExpiresAt: share.expiresAt.toISOString(),
+      },
     };
   }
 }

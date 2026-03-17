@@ -2,12 +2,12 @@ import { Controller, Get } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
 
 @Controller()
-export class FilesHealthController {
-  @MessagePattern({ cmd: 'getFilesHealth' })
-  getFilesHealth(): object {
+export class AppController {
+  @MessagePattern({ cmd: 'getAuthHealth' })
+  getAuthHealth(): object {
     return {
       status: 'Healthy!',
-      service: 'Files Service',
+      service: 'Auth Service',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
     };

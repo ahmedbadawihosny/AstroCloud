@@ -21,6 +21,9 @@ export class File {
   @Prop()
   checksumSha256?: string;
 
+  @Prop({ type: Object, default: {} })
+  metadata?: Record<string, unknown>;
+
   @Prop({ type: Date, default: null })
   deletedAt: Date | null;
 }

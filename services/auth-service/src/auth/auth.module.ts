@@ -18,6 +18,7 @@ import {
 import { NotificationModule } from '../notification/notification.module';
 import { WaitlistModule } from '../waitlist/waitlist.module';
 import configuration from '../common/config/configuration';
+import { NatsModule } from '@file-sharing-app/common';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import configuration from '../common/config/configuration';
           (configuration().JWT.JWT_ACCESS_EXPIRES_IN as string) || '1h',
       },
     }),
+    NatsModule,
     NotificationModule,
     WaitlistModule,
   ],

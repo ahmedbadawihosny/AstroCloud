@@ -14,6 +14,7 @@ import { EmailVerification } from './schema/emailVerification.schema';
 import { PasswordReset } from './schema/passwordReset.schema';
 import { WaitlistService } from '../waitlist/waitlist.service';
 import { NotificationService } from '../notification/notification.service';
+import { NatsClient } from '@file-sharing-app/common';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -31,6 +32,7 @@ describe('AuthService', () => {
   const passwordResetModelMock = {} as any;
   const waitlistServiceMock = {} as any;
   const notificationServiceMock = {} as any;
+  const natsClientMock = { publish: jest.fn() } as any;
 
   const jwtServiceMock = {
     sign: jest.fn().mockReturnValue('signed-token'),
@@ -58,6 +60,7 @@ describe('AuthService', () => {
           useValue: passwordResetModelMock,
         },
         { provide: JwtService, useValue: jwtServiceMock },
+        { provide: NatsClient, useValue: natsClientMock },
         { provide: WaitlistService, useValue: waitlistServiceMock },
         { provide: NotificationService, useValue: notificationServiceMock },
       ],

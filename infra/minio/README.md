@@ -1,5 +1,12 @@
-# MinIO (S3-compatible)
+# AWS S3 Storage
 
-MinIO is run via docker-compose at the repo root. Console: http://localhost:9001.
+The file service now uses AWS S3 directly for object storage.
 
-Set `FILE_STORAGE_PROVIDER=s3` and configure `FILE_S3_*` in .env to use MinIO for file storage.
+Configure these environment variables in `services/file-service/.env`:
+
+- `FILE_S3_REGION`
+- `FILE_S3_BUCKET`
+- `FILE_S3_ACCESS_KEY`
+- `FILE_S3_SECRET_KEY`
+
+Uploads are sent straight to S3 and downloads are returned as pre-signed S3 URLs.

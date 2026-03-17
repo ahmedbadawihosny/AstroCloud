@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { NatsModule } from '@file-sharing-app/common';
 import { AuthModule } from './auth/auth.module';
 import { AccountModule } from './account/account.module';
-import { HealthController } from './health.controller';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -17,6 +17,6 @@ import { HealthController } from './health.controller';
     AuthModule,
     AccountModule,
   ],
-  controllers: [HealthController],
+  controllers: [AppController],
 })
 export class AppModule {}

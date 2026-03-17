@@ -1,82 +1,32 @@
 import { Module } from '@nestjs/common';
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
-import { STORAGE_PROVIDER, StorageProvider, GetObjectResult } from './storage.interface';
+import { STORAGE_PROVIDER, type StorageProvider } from './storage.interface';
+import configuration from '../common/config/configuration';
+import { S3StorageProvider } from './s3.storage';
 
-class S3StorageProvider implements StorageProvider {
-  private readonly client: S3Client;
-  private readonly bucket: string;
-
-  constructor() {
-    const endpoint = process.env.FILE_S3_ENDPOINT || undefined;
-    const region = process.env.FILE_S3_REGION || 'us-east-1';
-    const accessKeyId = process.env.FILE_S3_ACCESS_KEY || '';
-    const secretAccessKey = process.env.FILE_S3_SECRET_KEY || '';
-    const forcePathStyle =
-      (process.env.FILE_S3_FORCE_PATH_STYLE || '').toLowerCase() === 'true';
-
-    this.bucket = process.env.FILE_S3_BUCKET || '';
-    if (!this.bucket) {
-      throw new Error('FILE_S3_BUCKET is required for S3 storage');
-    }
-
-    this.client = new S3Client({
-      region,
-      endpoint,
-      forcePathStyle,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
-  }
+class InMemoryStorageProvider implements StorageProvider {
+  private readonly objects = new Map<string, { body: Buffer; contentType: string }>();
 
   async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    });
-    await this.client.send(command);
+    this.objects.set(key, { body: Buffer.from(body), contentType });
   }
 
-  async get(key: string): Promise<GetObjectResult> {
-    const command = new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    });
-    const res = await this.client.send(command);
-
-    const chunks: Buffer[] = [];
-    const bodyStream = res.Body as any;
-
-    if (Buffer.isBuffer(bodyStream)) {
-      chunks.push(bodyStream);
-    } else if (bodyStream && typeof bodyStream.on === 'function') {
-      await new Promise<void>((resolve, reject) => {
-        bodyStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-        bodyStream.on('end', () => resolve());
-        bodyStream.on('error', (err: Error) => reject(err));
-      });
+  async get(key: string): Promise<{ body: Buffer; contentType: string }> {
+    const entry = this.objects.get(key);
+    if (!entry) {
+      throw new Error(`Object not found: ${key}`);
     }
-
     return {
-      body: Buffer.concat(chunks),
-      contentType: res.ContentType || 'application/octet-stream',
+      body: Buffer.from(entry.body),
+      contentType: entry.contentType,
     };
   }
 
+  async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
+    return `memory://download/${encodeURIComponent(key)}?expiresIn=${expiresInSeconds}`;
+  }
+
   async deleteObject(key: string): Promise<void> {
-    const command = new DeleteObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    });
-    await this.client.send(command);
+    this.objects.delete(key);
   }
 }
 
@@ -84,9 +34,31 @@ class S3StorageProvider implements StorageProvider {
   providers: [
     {
       provide: STORAGE_PROVIDER,
-      useClass: S3StorageProvider,
+      useFactory: () => {
+        const cfg = configuration();
+
+        if (cfg.NODE_ENV === 'test') {
+          return new InMemoryStorageProvider();
+        }
+
+        const { AWS_S3 } = cfg;
+        if (!AWS_S3.BUCKET) {
+          throw new Error('FILE_S3_BUCKET is required for S3 storage');
+        }
+        if (!AWS_S3.ACCESS_KEY_ID || !AWS_S3.SECRET_ACCESS_KEY) {
+          throw new Error('AWS S3 credentials are required for S3 storage');
+        }
+
+        return new S3StorageProvider({
+          region: AWS_S3.REGION,
+          bucket: AWS_S3.BUCKET,
+          accessKeyId: AWS_S3.ACCESS_KEY_ID,
+          secretAccessKey: AWS_S3.SECRET_ACCESS_KEY,
+        });
+      },
     },
   ],
   exports: [STORAGE_PROVIDER],
 })
 export class StorageModule {}
+

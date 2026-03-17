@@ -4,7 +4,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { Controller, Get } from '@nestjs/common';
 import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 
-const HEALTH_TIMEOUT_MS = 3000;
+const HEALTH_TIMEOUT_MS = 4000;
 
 function unreachableResponse(serviceName: string) {
   return {
@@ -15,7 +15,7 @@ function unreachableResponse(serviceName: string) {
   };
 }
 
-@ApiTags('Health')
+@ApiTags('Gateway')
 @Controller('api/v1')
 export class AppController {
   constructor(@Inject('NATS_SERVICE') private natsClient: ClientProxy) {}

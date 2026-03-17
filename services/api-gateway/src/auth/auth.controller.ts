@@ -201,7 +201,6 @@ export class AuthGatewayController {
                 _id: { type: 'string', example: '507f1f77bcf86cd799439011' },
                 email: { type: 'string', example: 'john.doe@example.com' },
                 name: { type: 'string', example: 'John Doe' },
-                role: { type: 'string', example: 'STUDENT' },
               },
             },
           },
@@ -326,7 +325,6 @@ export class AuthGatewayController {
         _id: { type: 'string', example: '507f1f77bcf86cd799439011' },
         email: { type: 'string', example: 'john.doe@example.com' },
         name: { type: 'string', example: 'John Doe' },
-        role: { type: 'string', example: 'STUDENT' },
         avatarUrl: {
           type: 'string',
           example: 'https://example.com/avatar.jpg',

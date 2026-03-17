@@ -29,6 +29,39 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 export class AccountGatewayController {
   constructor(private readonly accountService: AccountGatewayService) {}
 
+   /** Resolve current user id from req.user (id, sub, or _id) so upload and sessions use the same value. */
+   private getCurrentUserId(req: unknown): string | undefined {
+    const r = req as
+      | { user?: { _id?: unknown; id?: unknown; sub?: unknown } }
+      | undefined;
+    const raw = r?.user?.id ?? r?.user?.sub ?? r?.user?._id;
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'string') return raw.trim() || undefined;
+    if (typeof raw === 'object' && raw !== null) {
+      // Prefer Mongo ObjectId-style conversions when available.
+      const maybeHex = (raw as { toHexString?: () => string }).toHexString?.();
+      if (typeof maybeHex === 'string' && maybeHex.trim())
+        return maybeHex.trim();
+
+      const s = (raw as { toString?: () => string }).toString?.();
+      if (typeof s === 'string') {
+        const trimmed = s.trim();
+        if (trimmed && trimmed !== '[object Object]') return trimmed;
+      }
+      // Avoid returning "[object Object]" for arbitrary objects
+      return undefined;
+    }
+    if (
+      typeof raw === 'number' ||
+      typeof raw === 'boolean' ||
+      typeof raw === 'bigint' ||
+      typeof raw === 'symbol'
+    ) {
+      return String(raw).trim() || undefined;
+    }
+    return undefined;
+  }
+
   @ApiOperation({
     summary: 'Get user account information',
     description:
@@ -78,8 +111,9 @@ export class AccountGatewayController {
   })
   @Get('user/:userId')
   async findOne(@Param('userId') userId: string, @Request() req: any) {
+    const currentUserId = this.getCurrentUserId(req);
     // Authorization: User can only access their own account
-    if (req.user._id !== userId) {
+    if (currentUserId !== userId) {
       throw new ForbiddenException(
         'Access denied: You can only access your own account',
       );
@@ -144,8 +178,9 @@ export class AccountGatewayController {
     @Body() updateAccountDto: UpdateAccountDto,
     @Request() req: any,
   ) {
+    const currentUserId = this.getCurrentUserId(req);
     // Authorization: User can only update their own account
-    if (req.user._id !== userId) {
+    if (currentUserId !== userId) {
       throw new ForbiddenException(
         'Access denied: You can only update your own account',
       );

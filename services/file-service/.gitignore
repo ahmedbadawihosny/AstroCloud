@@ -34,10 +34,6 @@ coverage
 .nyc_output
 *.lcov
 
-# Storage / uploads (only ignore top-level dirs)
-/storage
-/uploads
-
 # Misc
 *.local
 .cache

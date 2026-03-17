@@ -9,7 +9,7 @@ export class CorsMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     const origin = req.headers.origin;
     const allowedOrigins = configuration().FRONTEND_ORIGIN?.split(',') || [
-      'http://localhost:3000',
+      'http://localhost:4000',
     ];
 
     // Set CORS headers

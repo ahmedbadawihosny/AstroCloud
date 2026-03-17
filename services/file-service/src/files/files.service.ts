@@ -1,32 +1,95 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+import { Injectable, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { RpcException } from '@nestjs/microservices';
 import { Model, Types } from 'mongoose';
-import { randomUUID } from 'crypto';
-import { NatsClient, EVENTS } from '@file-sharing-app/common';
+import { randomUUID, createHash } from 'crypto';
+import configuration from '../common/config/configuration';
 import { File, FileDocument } from './file.schema';
 import { STORAGE_PROVIDER, StorageProvider } from '../storage/storage.interface';
 import { ShareService } from '../share/share.service';
+import { NatsClient, EVENTS } from '@file-sharing-app/common';
+
+function toObjectId(id: string) {
+  return new Types.ObjectId(id);
+}
 
 @Injectable()
 export class FilesService {
   constructor(
-    @InjectModel(File.name) private fileModel: Model<FileDocument>,
-    @Inject(STORAGE_PROVIDER) private storage: StorageProvider,
+    @InjectModel(File.name) private readonly fileModel: Model<FileDocument>,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly nats: NatsClient,
     private readonly shareService: ShareService,
   ) {}
+
+  private get maxUploadSizeBytes() {
+    return configuration().FILES.MAX_UPLOAD_SIZE_BYTES;
+  }
+
+  private get downloadUrlTtlSeconds() {
+    return configuration().FILES.DOWNLOAD_URL_EXPIRES_IN_SECONDS;
+  }
+
+  private async buildFilePayload(doc: any) {
+    const downloadUrl = await this.storage.getSignedUrl(
+      doc.storageKey,
+      this.downloadUrlTtlSeconds,
+    );
+
+    return {
+      fileId: doc._id.toString(),
+      originalName: doc.originalName,
+      size: doc.size,
+      mimeType: doc.mimeType,
+      checksumSha256: doc.checksumSha256 ?? null,
+      metadata: doc.metadata ?? {},
+      createdAt: doc.createdAt,
+      deletedAt: doc.deletedAt ?? null,
+      downloadUrl,
+      downloadUrlExpiresAt: new Date(
+        Date.now() + this.downloadUrlTtlSeconds * 1000,
+      ).toISOString(),
+    };
+  }
 
   async upload(payload: {
     userId: string;
     file: unknown;
     metadata?: Record<string, unknown>;
   }) {
-    const userId = new Types.ObjectId(payload.userId);
-    const file = payload.file as { buffer?: Buffer; originalname?: string; mimetype?: string };
-    const buffer = Buffer.isBuffer(file?.buffer) ? file.buffer : Buffer.from([]);
+    const userId = toObjectId(payload.userId);
+    const file = payload.file as {
+      buffer?: Buffer;
+      originalname?: string;
+      mimetype?: string;
+    };
+    if (file?.buffer === undefined || file?.buffer === null) {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'File payload is required',
+        error: 'Bad Request',
+      });
+    }
+
+    const buffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer as any);
     const originalName = (file?.originalname as string) || 'file';
     const mimeType = (file?.mimetype as string) || 'application/octet-stream';
+
+    if (buffer.length > this.maxUploadSizeBytes) {
+      throw new RpcException({
+        statusCode: 413,
+        message: 'File exceeds the maximum upload size of 100MB',
+        error: 'Payload Too Large',
+      });
+    }
+
     const storageKey = `${payload.userId}/${randomUUID()}-${originalName}`;
+    const checksumSha256 = createHash('sha256').update(buffer).digest('hex');
 
     await this.storage.putObject(storageKey, buffer, mimeType);
 
@@ -36,6 +99,8 @@ export class FilesService {
       storageKey,
       size: buffer.length,
       mimeType,
+      checksumSha256,
+      metadata: payload.metadata ?? {},
       deletedAt: null,
     });
 
@@ -46,6 +111,7 @@ export class FilesService {
         filename: doc.originalName,
         size: doc.size,
         mimeType: doc.mimeType,
+        checksumSha256,
         createdAt: (doc as any).createdAt?.toISOString?.() ?? new Date().toISOString(),
       });
     } catch (err) {
@@ -54,60 +120,72 @@ export class FilesService {
 
     return {
       message: 'File uploaded',
-      data: {
-        fileId: doc._id.toString(),
-        originalName: doc.originalName,
-        size: doc.size,
-        mimeType: doc.mimeType,
-        createdAt: (doc as any).createdAt,
-      },
+      data: await this.buildFilePayload(doc),
     };
   }
 
   async list(userId: string) {
     const list = await this.fileModel
-      .find({ userId: new Types.ObjectId(userId), deletedAt: null })
+      .find({ userId: toObjectId(userId), deletedAt: null })
       .sort({ createdAt: -1 })
       .lean();
+
     return {
       message: 'Files listed',
-      data: list.map((f) => ({
-        fileId: (f as any)._id.toString(),
-        originalName: f.originalName,
-        size: f.size,
-        mimeType: f.mimeType,
-        createdAt: (f as { createdAt?: Date }).createdAt,
-      })),
+      data: await Promise.all(
+        list.map(async (f) => ({
+          fileId: (f as any)._id.toString(),
+          originalName: f.originalName,
+          size: f.size,
+          mimeType: f.mimeType,
+          checksumSha256: (f as any).checksumSha256 ?? null,
+          metadata: (f as any).metadata ?? {},
+          createdAt: (f as { createdAt?: Date }).createdAt,
+          downloadUrl: await this.storage.getSignedUrl(
+            (f as any).storageKey,
+            this.downloadUrlTtlSeconds,
+          ),
+          downloadUrlExpiresAt: new Date(
+            Date.now() + this.downloadUrlTtlSeconds * 1000,
+          ).toISOString(),
+        })),
+      ),
     };
   }
 
   async get(fileId: string, userId: string) {
-    const doc = await this.fileModel.findOne({
-      _id: new Types.ObjectId(fileId),
-      userId: new Types.ObjectId(userId),
-      deletedAt: null,
-    });
-    if (!doc) throw new NotFoundException('File not found');
-    const { body, contentType } = await this.storage.get(doc.storageKey);
+    const doc = await this.fileModel
+      .findOne({
+        _id: toObjectId(fileId),
+        userId: toObjectId(userId),
+        deletedAt: null,
+      })
+      .exec();
+
+    if (!doc) throw new RpcException({ statusCode: 404, message: 'File not found', error: 'Not Found' });
+
     return {
-      contentType,
-      contentDisposition: `attachment; filename="${doc.originalName}"`,
-      body: body.toString('base64'),
-      encoding: 'base64',
+      message: 'File retrieved',
+      data: await this.buildFilePayload(doc),
     };
   }
 
   async delete(fileId: string, userId: string) {
-    const doc = await this.fileModel.findOne({
-      _id: new Types.ObjectId(fileId),
-      userId: new Types.ObjectId(userId),
-      deletedAt: null,
-    });
-    if (!doc) throw new NotFoundException('File not found');
+    const doc = await this.fileModel
+      .findOne({
+        _id: toObjectId(fileId),
+        userId: toObjectId(userId),
+        deletedAt: null,
+      })
+      .exec();
+
+    if (!doc) throw new RpcException({ statusCode: 404, message: 'File not found', error: 'Not Found' });
+
     await this.storage.deleteObject(doc.storageKey);
     const deletedAt = new Date();
     doc.deletedAt = deletedAt;
     await doc.save();
+
     try {
       await this.nats.publish(EVENTS.FILE_DELETED, {
         fileId: doc._id.toString(),
@@ -117,18 +195,31 @@ export class FilesService {
     } catch (err) {
       console.warn('[FilesService] file_deleted publish failed:', err);
     }
-    return { message: 'File deleted' };
+
+    return {
+      message: 'File deleted',
+      data: {
+        fileId: doc._id.toString(),
+        deletedAt: deletedAt.toISOString(),
+      },
+    };
   }
 
   async share(fileId: string, userId: string, expiresInSeconds: number) {
-    const { token, expiresAt } = await this.shareService.createShare(userId, fileId, expiresInSeconds);
+    const safeExpiresInSeconds = Math.max(60, Math.min(Number(expiresInSeconds) || 0, 7 * 24 * 60 * 60));
+    const { token, expiresAt } = await this.shareService.createShare(
+      userId,
+      fileId,
+      safeExpiresInSeconds,
+    );
+
     return {
       message: 'Share created',
       data: {
         fileId,
         token,
         expiresAt,
-        shareUrl: `/share/${token}`,
+        shareUrl: `/api/v1/share/${token}`,
       },
     };
   }

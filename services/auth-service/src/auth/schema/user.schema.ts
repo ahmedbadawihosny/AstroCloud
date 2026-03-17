@@ -7,7 +7,6 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { IsBoolean, IsNotEmpty, IsString } from 'class-validator';
 import { HydratedDocument } from 'mongoose';
-import { Role } from '../enums/role.enum';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -31,8 +30,8 @@ export class User {
   @IsString()
   profilePictureUrl: string | null;
 
-  @Prop({ type: String, enum: Role, default: Role.PENDING })
-  role: Role;
+  @Prop({ type: String, default: 'PENDING' })
+  role: string;
 
   @Prop({ default: false })
   @IsBoolean()

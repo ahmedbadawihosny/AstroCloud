@@ -15,10 +15,10 @@ describe('AppController', () => {
 
   describe('root', () => {
     it('should return health check', () => {
-      const result = appController.getHealth();
+      const result = appController.getAuthHealth();
       expect(result).toEqual({
         status: 'Healthy!',
-        service: 'APP Service',
+        service: 'Auth Service',
         version: '1.0.0',
         timestamp: expect.any(String) as unknown as string,
       });

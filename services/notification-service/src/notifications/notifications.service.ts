@@ -1,11 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   health() {
     return { status: 'ok' };
   }
 
-  // Subscribes to: user_created, file_uploaded, file_deleted, file_shared (NATS)
-  // Sends emails/webhooks/logs; idempotent with eventId
+  handleUserCreated(payload: Record<string, unknown>) {
+    this.logger.log(`user_created event received: ${JSON.stringify(payload)}`);
+    return { accepted: true };
+  }
+
+  handleFileUploaded(payload: Record<string, unknown>) {
+    this.logger.log(`file_uploaded event received: ${JSON.stringify(payload)}`);
+    return { accepted: true };
+  }
+
+  handleFileDeleted(payload: Record<string, unknown>) {
+    this.logger.log(`file_deleted event received: ${JSON.stringify(payload)}`);
+    return { accepted: true };
+  }
+
+  handleFileShared(payload: Record<string, unknown>) {
+    this.logger.log(`file_shared event received: ${JSON.stringify(payload)}`);
+    return { accepted: true };
+  }
 }

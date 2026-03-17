@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NatsModule } from '@file-sharing-app/common';
 import { FilesModule } from './files/files.module';
 import { ShareModule } from './share/share.module';
-import { FilesHealthController } from './health.controller';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -12,11 +12,28 @@ import { FilesHealthController } from './health.controller';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    MongooseModule.forRoot(process.env.MONGODB_URI as string),
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const uri =
+          configService.get<string>('MONGODB_URI') ||
+          configService.get<string>('DATABASE.MONGODB_URI') ||
+          process.env.MONGODB_URI;
+
+        if (!uri && process.env.NODE_ENV !== 'test') {
+          throw new Error('MONGODB_URI is required for file-service');
+        }
+
+        return {
+          uri: uri as string,
+        };
+      },
+    }),
     NatsModule,
     FilesModule,
     ShareModule,
   ],
-  controllers: [FilesHealthController],
+  controllers: [AppController],
 })
 export class AppModule { }

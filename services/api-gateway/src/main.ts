@@ -109,7 +109,7 @@ async function bootstrap() {
   const port =
     typeof rawPort === 'number' && Number.isFinite(rawPort)
       ? rawPort
-      : 3000;
+      : 4000;
   await app.listen(port);
 }
 
@@ -120,7 +120,7 @@ bootstrap().catch((err: NodeJS.ErrnoException) => {
     const port =
       typeof rawPort === 'number' && Number.isFinite(rawPort)
         ? rawPort
-        : 3000;
+        : 4000;
     console.error(`\nPort ${port} is already in use. Stop the other API Gateway process (or close its terminal) and try again.\n`);
   } else {
     console.error('Bootstrap failed:', err);
