@@ -1,6 +1,9 @@
 {
   "name": "auth-service",
   "version": "0.0.1",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "pnpm --filter @file-sharing-app/common build && nest build",
     "dev": "nest start --watch",

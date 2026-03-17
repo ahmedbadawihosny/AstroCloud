@@ -1,6 +1,9 @@
 {
   "name": "api-gateway",
   "version": "0.0.1",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
