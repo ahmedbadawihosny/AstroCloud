@@ -5,11 +5,10 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY pnpm-lock.yaml ./
 
 # Install pnpm and dependencies
 RUN npm install -g pnpm
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -25,11 +24,10 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY pnpm-lock.yaml ./
 
 # Install pnpm and production dependencies only
 RUN npm install -g pnpm
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --no-frozen-lockfile --prod
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
