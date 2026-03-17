@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY pnpm-workspace.yaml ./
 COPY packages/common/package.json packages/common/package.json
-COPY packages/common/dist packages/common/dist
+COPY packages/common/*.js packages/common/
 
 # Install pnpm and dependencies
 RUN npm install -g pnpm
@@ -29,7 +29,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY pnpm-workspace.yaml ./
 COPY packages/common/package.json packages/common/package.json
-COPY packages/common/dist packages/common/dist
+COPY packages/common/*.js packages/common/
 
 # Install pnpm and production dependencies only
 RUN npm install -g pnpm
