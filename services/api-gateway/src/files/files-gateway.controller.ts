@@ -12,8 +12,8 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags
 export class FilesGatewayController {
   constructor(private readonly filesGatewayService: FilesGatewayService) {}
 
-   /** Resolve current user id from req.user (id, sub, or _id) so upload and sessions use the same value. */
-   private getCurrentUserId(req: unknown): string | undefined {
+  /** Resolve current user id from req.user (id, sub, or _id) so upload and sessions use the same value. */
+  private getCurrentUserId(req: unknown): string | undefined {
     const r = req as
       | { user?: { _id?: unknown; id?: unknown; sub?: unknown } }
       | undefined;
@@ -28,21 +28,22 @@ export class FilesGatewayController {
 
       const s = (raw as { toString?: () => string }).toString?.();
       if (typeof s === 'string') {
-        const trimmed = s.trim();
-        if (trimmed && trimmed !== '[object Object]') return trimmed;
+        return s.trim() || undefined;
       }
-      // Avoid returning "[object Object]" for arbitrary objects
-      return undefined;
-    }
-    if (
-      typeof raw === 'number' ||
-      typeof raw === 'boolean' ||
-      typeof raw === 'bigint' ||
-      typeof raw === 'symbol'
-    ) {
-      return String(raw).trim() || undefined;
     }
     return undefined;
+  }
+
+  /** Get auth token from request headers or cookies */
+  private getAuthToken(req: any): string {
+    // Try to get from Authorization header first
+    const authHeader = req.headers?.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      return authHeader.substring(7);
+    }
+    
+    // Fallback to access token cookie
+    return req.cookies?.accessToken || '';
   }
 
   @Post('upload')
@@ -70,11 +71,12 @@ export class FilesGatewayController {
   @ApiResponse({ status: 200, description: 'File uploaded successfully' })
   async upload(@Req() req: any, @Res() res: Response) {
     const userId = this.getCurrentUserId(req);
+    const authToken = this.getAuthToken(req);
     const result = await this.filesGatewayService.upload({
       userId: String(userId),
       file: req.body?.file ?? req.file,
       metadata: req.body,
-    });
+    }, authToken);
     return res.status(200).json(result);
   }
 
@@ -86,7 +88,8 @@ export class FilesGatewayController {
   @ApiResponse({ status: 200, description: 'Files listed successfully' })
   async list(@Req() req: any, @Res() res: Response) {
     const userId = this.getCurrentUserId(req);
-    const result = await this.filesGatewayService.list(String(userId));
+    const authToken = this.getAuthToken(req);
+    const result = await this.filesGatewayService.list(authToken);
     return res.status(200).json(result);
   }
 
@@ -100,7 +103,8 @@ export class FilesGatewayController {
   @ApiResponse({ status: 404, description: 'File not found' })
   async get(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
     const userId = this.getCurrentUserId(req);
-    const result = await this.filesGatewayService.get({ userId: String(userId), fileId: id });
+    const authToken = this.getAuthToken(req);
+    const result = await this.filesGatewayService.get(id, authToken);
     return res.status(200).json(result);
   }
 
@@ -113,7 +117,8 @@ export class FilesGatewayController {
   @ApiResponse({ status: 404, description: 'File not found' })
   async delete(@Param('id') id: string, @Req() req: any, @Res() res: Response) {
     const userId = this.getCurrentUserId(req);
-    const result = await this.filesGatewayService.delete({ userId: String(userId), fileId: id });
+    const authToken = this.getAuthToken(req);
+    const result = await this.filesGatewayService.delete(id, authToken);
     return res.status(200).json(result);
   }
 
@@ -131,11 +136,10 @@ export class FilesGatewayController {
     @Res() res: Response,
   ) {
     const userId = this.getCurrentUserId(req);
-    const result = await this.filesGatewayService.share({
-      userId: String(userId),
-      fileId: id,
+    const authToken = this.getAuthToken(req);
+    const result = await this.filesGatewayService.share(id, {
       expiresInSeconds: body?.expiresInSeconds ?? 86400,
-    });
+    }, authToken);
     return res.status(200).json(result);
   }
 }

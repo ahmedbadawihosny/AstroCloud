@@ -13,20 +13,19 @@ import type { UploadedFile } from '../common/interfaces/file.interface';
 export class AuthGatewayService {
   constructor(
     @Inject('NATS_SERVICE')
-    private readonly client: ClientProxy,
-  ) {}
+    private readonly natsClient: ClientProxy,
+  ) { }
 
   register(dto: RegisterDto, userAgent: string) {
     const payload = { ...dto, userAgent };
-    return this.client.send({ cmd: 'register' }, payload);
+    return this.natsClient.send({ cmd: 'register' }, payload);
   }
 
   verifyEmail(dto: VerifyEmailDto) {
-    return this.client.send({ cmd: 'verifyEmail' }, dto);
+    return this.natsClient.send({ cmd: 'verifyEmail' }, dto);
   }
 
   uploadProfilePicture(dto: UploadProfilePictureDto & { file: UploadedFile }) {
-    // Convert buffer to base64 for microservice transmission
     const payload = {
       ...dto,
       file: {
@@ -37,35 +36,35 @@ export class AuthGatewayService {
             : dto.file.buffer,
       },
     };
-    return this.client.send({ cmd: 'uploadProfilePicture' }, payload);
+    return this.natsClient.send({ cmd: 'uploadProfilePicture' }, payload);
   }
 
   login(dto: LoginDto, userAgent: string) {
     const payload = { ...dto, userAgent };
-    return this.client.send({ cmd: 'login' }, payload);
+    return this.natsClient.send({ cmd: 'login' }, payload);
   }
 
   currentUser(accessToken: string) {
-    return this.client.send({ cmd: 'currentUser' }, accessToken);
+    return this.natsClient.send({ cmd: 'currentUser' }, accessToken);
   }
 
   refreshToken(refreshToken: string) {
-    return this.client.send({ cmd: 'refreshToken' }, refreshToken);
+    return this.natsClient.send({ cmd: 'refreshToken' }, refreshToken);
   }
 
   requestResetPassword(dto: RequestResetPasswordDto) {
-    return this.client.send({ cmd: 'requestResetPassword' }, dto);
+    return this.natsClient.send({ cmd: 'requestResetPassword' }, dto);
   }
 
   verifyResetCode(dto: VerifyResetCodeDto) {
-    return this.client.send({ cmd: 'verifyResetCode' }, dto);
+    return this.natsClient.send({ cmd: 'verifyResetCode' }, dto);
   }
 
   resetPassword(dto: ResetPasswordDto & { resetToken: string }) {
-    return this.client.send({ cmd: 'resetPassword' }, dto);
+    return this.natsClient.send({ cmd: 'resetPassword' }, dto);
   }
 
   logout(refreshToken: string) {
-    return this.client.send({ cmd: 'logout' }, refreshToken);
+    return this.natsClient.send({ cmd: 'logout' }, refreshToken);
   }
 }

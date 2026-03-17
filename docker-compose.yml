@@ -33,40 +33,24 @@ services:
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET:-supersecret}
       NATS_URL: nats://nats:4222
+    ports:
+      - "4000:4000"
     depends_on:
       nats:
+        condition: service_healthy
+      app:
         condition: service_healthy
     networks:
       - app
 
-  auth-service:
+  app:
     build:
       context: .
-      dockerfile: services/auth-service/Dockerfile
+      dockerfile: services/app/Dockerfile
     environment:
       JWT_SECRET: ${JWT_SECRET:-supersecret}
-      MONGODB_URI: mongodb://root:rootpass@mongo:27017/auth_db?authSource=admin
-      NATS_URL: nats://nats:4222
-    depends_on:
-      mongo:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    networks:
-      - app
-
-  file-service:
-    build:
-      context: .
-      dockerfile: services/file-service/Dockerfile
-    environment:
-      MONGODB_URI: mongodb://root:rootpass@mongo:27017/file_db?authSource=admin
-      NATS_URL: nats://nats:4222
+      MONGODB_URI: mongodb://root:rootpass@mongo:27017/file_sharing_app?authSource=admin
+      NATS_URL: nats://0.0.0.0:4222
       FILE_S3_REGION: us-east-1
       FILE_S3_BUCKET: ${FILE_S3_BUCKET}
       FILE_S3_ACCESS_KEY: ${FILE_S3_ACCESS_KEY}
@@ -76,25 +60,9 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+    # Health check via NATS connection
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3002/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    networks:
-      - app
-
-  notification-service:
-    build:
-      context: .
-      dockerfile: services/notification-service/Dockerfile
-    environment:
-      NATS_URL: nats://nats:4222
-    depends_on:
-      nats:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3003/notifications/health"]
+      test: ["CMD", "sh", "-c", "until nc -z nats 4222; do sleep 1; done"]
       interval: 10s
       timeout: 3s
       retries: 3

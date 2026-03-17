@@ -39,7 +39,7 @@ import type { UploadedFile as CustomUploadedFile } from '../common/interfaces/fi
 @ApiCookieAuth()
 @Controller('api/v1/auth')
 export class AuthGatewayController {
-  constructor(private readonly authService: AuthGatewayService) {}
+  constructor(private readonly authService: AuthGatewayService) { }
 
   // Register Flow
   @ApiOperation({
@@ -226,7 +226,7 @@ export class AuthGatewayController {
     const result = await firstValueFrom(this.authService.login(dto, userAgent));
 
     // Set refresh token in HTTP-only cookie
-    response.cookie('refreshToken', result.data.refreshToken, {
+    response.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: configuration().NODE_ENV === 'production',
       sameSite: configuration().NODE_ENV === 'production' ? 'none' : 'lax',
@@ -235,7 +235,7 @@ export class AuthGatewayController {
     });
 
     // Set access token in HTTP-only cookie
-    response.cookie('accessToken', result.data.accessToken, {
+    response.cookie('accessToken', result.accessToken, {
       httpOnly: true,
       secure: configuration().NODE_ENV === 'production',
       sameSite: configuration().NODE_ENV === 'production' ? 'none' : 'lax',
@@ -284,9 +284,7 @@ export class AuthGatewayController {
       throw new BadRequestException('Refresh token cookie is required');
     }
 
-    const result = await firstValueFrom(
-      this.authService.refreshToken(refreshToken),
-    );
+    const result = await firstValueFrom(this.authService.refreshToken(refreshToken));
 
     // Set new refresh token in HTTP-only cookie
     response.cookie('refreshToken', result.refreshToken, {

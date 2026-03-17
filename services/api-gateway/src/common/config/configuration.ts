@@ -1,6 +1,6 @@
 export default () => ({
   //? =========== Backend Configuration ===========
-  PORT: parseInt(process.env.PORT || ''),
+  PORT: parseInt(process.env.PORT || '4000'),
   NODE_ENV: process.env.NODE_ENV,
   NATS_URL: process.env.NATS_URL,
   // NATS_USER: process.env.NATS_USER,
