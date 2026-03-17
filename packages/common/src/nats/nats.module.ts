@@ -1,4 +1,5 @@
 import { Global, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import 'reflect-metadata';
 import { NatsClient } from './nats.client';
 
 function getServers(): string[] {
@@ -17,7 +18,7 @@ function getServers(): string[] {
   exports: [NatsClient],
 })
 export class NatsModule implements OnModuleInit, OnModuleDestroy {
-  constructor(private readonly nats: NatsClient) {}
+  constructor(private readonly nats: NatsClient) { }
 
   async onModuleInit(): Promise<void> {
     await this.nats.connect({ servers: getServers() });
