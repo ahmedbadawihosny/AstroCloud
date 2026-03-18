@@ -13,14 +13,30 @@ export class JwtGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const authHeader: string | undefined = request.headers?.authorization;
+    const cookieToken: string | undefined = request.cookies?.accessToken;
+    console.log('[JwtGuard] request.cookies:', request.cookies);
+    console.log('[JwtGuard] request.headers.authorization:', authHeader);
 
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid Authorization header');
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length).trim()
+      : cookieToken?.trim();
+    console.log('[JwtGuard] extracted token:', {
+      source: authHeader?.startsWith('Bearer ') ? 'header' : 'cookie',
+      tokenLength: token?.length ?? 0,
+    });
+
+    if (!token) {
+      throw new UnauthorizedException(
+        'Missing access token in Authorization header or cookies',
+      );
     }
-
-    const token = authHeader.slice('Bearer '.length).trim();
     try {
-      const payload = this.jwtService.verify(token);
+      const payload = this.jwtService.verify(token, {
+        secret:
+          process.env.JWT_ACCESS_SECRET ||
+          process.env.JWT_SECRET ||
+          'supersecret',
+      });
       request.user = payload;
       return true;
     } catch {

@@ -11,7 +11,10 @@ import { FilesGatewayService } from './files-gateway.service';
     HttpModule,
     NatsClientModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'supersecret',
+      secret:
+        process.env.JWT_ACCESS_SECRET ||
+        process.env.JWT_SECRET ||
+        'supersecret',
       signOptions: { expiresIn: '15m' },
     }),
   ],

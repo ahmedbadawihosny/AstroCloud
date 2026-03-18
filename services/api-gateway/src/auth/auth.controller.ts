@@ -41,6 +41,16 @@ import type { UploadedFile as CustomUploadedFile } from '../common/interfaces/fi
 export class AuthGatewayController {
   constructor(private readonly authService: AuthGatewayService) { }
 
+  private getCookieOptions() {
+    const isProduction = configuration().NODE_ENV === 'production';
+    return {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      path: '/',
+    } as const;
+  }
+
   // Register Flow
   @ApiOperation({
     summary: 'Register a new user',
@@ -224,23 +234,24 @@ export class AuthGatewayController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const result = await firstValueFrom(this.authService.login(dto, userAgent));
+    console.log('[AuthGateway] login result:', result);
+
+    const accessToken = result?.data?.accessToken ?? result?.accessToken;
+    const refreshToken = result?.data?.refreshToken ?? result?.refreshToken;
+    if (!accessToken || !refreshToken) {
+      throw new Error('Auth service did not return tokens');
+    }
 
     // Set refresh token in HTTP-only cookie
-    response.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: configuration().NODE_ENV === 'production',
-      sameSite: configuration().NODE_ENV === 'production' ? 'none' : 'lax',
+    response.cookie('refreshToken', refreshToken, {
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      path: '/',
     });
 
     // Set access token in HTTP-only cookie
-    response.cookie('accessToken', result.accessToken, {
-      httpOnly: true,
-      secure: configuration().NODE_ENV === 'production',
-      sameSite: configuration().NODE_ENV === 'production' ? 'none' : 'lax',
+    response.cookie('accessToken', accessToken, {
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60, // 1 hour
-      path: '/',
     });
 
     // Return response without tokens in body
@@ -280,28 +291,34 @@ export class AuthGatewayController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const refreshToken = request.cookies?.refreshToken;
+    console.log('[AuthGateway] refresh-token cookies:', request.cookies);
     if (!refreshToken) {
       throw new BadRequestException('Refresh token cookie is required');
     }
 
+    console.log('[AuthGateway] forwarding refresh token:', {
+      hasRefreshToken: Boolean(refreshToken),
+      tokenLength: refreshToken?.length,
+    });
     const result = await firstValueFrom(this.authService.refreshToken(refreshToken));
+    console.log('[AuthGateway] refresh-token result:', result);
+
+    const accessToken = result?.data?.accessToken ?? result?.accessToken;
+    const nextRefreshToken = result?.data?.refreshToken ?? result?.refreshToken;
+    if (!accessToken || !nextRefreshToken) {
+      throw new Error('Auth service did not return tokens');
+    }
 
     // Set new refresh token in HTTP-only cookie
-    response.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: configuration().NODE_ENV === 'production',
-      sameSite: configuration().NODE_ENV === 'production' ? 'none' : 'lax',
+    response.cookie('refreshToken', nextRefreshToken, {
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      path: '/',
     });
 
     // Set new access token in HTTP-only cookie
-    response.cookie('accessToken', result.accessToken, {
-      httpOnly: true,
-      secure: configuration().NODE_ENV === 'production',
-      sameSite: configuration().NODE_ENV === 'production' ? 'none' : 'lax',
+    response.cookie('accessToken', accessToken, {
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60, // 1 hour
-      path: '/',
     });
 
     return {
@@ -341,9 +358,14 @@ export class AuthGatewayController {
   @Get('current-user')
   currentUser(@Req() request: Request) {
     const accessToken = request.cookies?.accessToken;
+    console.log('[AuthGateway] current-user cookies:', request.cookies);
     if (!accessToken) {
       throw new BadRequestException('Access token cookie is required');
     }
+    console.log('[AuthGateway] forwarding access token:', {
+      hasAccessToken: Boolean(accessToken),
+      tokenLength: accessToken?.length,
+    });
     return this.authService.currentUser(accessToken);
   }
 

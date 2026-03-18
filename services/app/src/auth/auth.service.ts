@@ -60,7 +60,14 @@ export class AuthService {
   // ========== Helpers ==========
 
   private signAccessToken(userId: string, role: string) {
-    return this.jwtService.sign({ userId, role });
+    return this.jwtService.sign(
+      { userId, role },
+      {
+        secret:
+          configuration().JWT.JWT_ACCESS_SECRET || 'fallback-secret-key',
+        expiresIn: (configuration().JWT.JWT_ACCESS_EXPIRES_IN || '1h') as any,
+      },
+    );
   }
 
   private signRefreshToken(userId: string, role: string) {
@@ -412,6 +419,10 @@ export class AuthService {
     try {
       const payload = this.jwtService.verify<{ userId: string; role: string }>(
         accessToken,
+        {
+          secret:
+            configuration().JWT.JWT_ACCESS_SECRET || 'fallback-secret-key',
+        },
       );
       const user = await this.userModel
         .findById(payload.userId)

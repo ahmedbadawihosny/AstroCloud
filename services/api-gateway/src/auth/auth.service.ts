@@ -45,10 +45,18 @@ export class AuthGatewayService {
   }
 
   currentUser(accessToken: string) {
+    console.log('[AuthGatewayService] currentUser payload:', {
+      hasAccessToken: Boolean(accessToken),
+      tokenLength: accessToken?.length,
+    });
     return this.natsClient.send({ cmd: 'currentUser' }, accessToken);
   }
 
   refreshToken(refreshToken: string) {
+    console.log('[AuthGatewayService] refreshToken payload:', {
+      hasRefreshToken: Boolean(refreshToken),
+      tokenLength: refreshToken?.length,
+    });
     return this.natsClient.send({ cmd: 'refreshToken' }, refreshToken);
   }
 

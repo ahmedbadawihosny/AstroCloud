@@ -36,14 +36,26 @@ export class FilesGatewayController {
 
   /** Get auth token from request headers or cookies */
   private getAuthToken(req: any): string {
+    console.log('[FilesGateway] request.cookies:', req.cookies);
+    console.log('[FilesGateway] request.headers.authorization:', req.headers?.authorization);
     // Try to get from Authorization header first
     const authHeader = req.headers?.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      return authHeader.substring(7);
+      const token = authHeader.substring(7);
+      console.log('[FilesGateway] extracted token from header:', {
+        source: 'header',
+        tokenLength: token.length,
+      });
+      return token;
     }
     
     // Fallback to access token cookie
-    return req.cookies?.accessToken || '';
+    const token = req.cookies?.accessToken || '';
+    console.log('[FilesGateway] extracted token from cookie:', {
+      source: 'cookie',
+      tokenLength: token.length,
+    });
+    return token;
   }
 
   @Post('upload')
@@ -72,6 +84,13 @@ export class FilesGatewayController {
   async upload(@Req() req: any, @Res() res: Response) {
     const userId = this.getCurrentUserId(req);
     const authToken = this.getAuthToken(req);
+    if (!authToken) {
+      throw new Error('Missing access token for file upload');
+    }
+    console.log('[FilesGateway] upload userId/authToken:', {
+      userId,
+      tokenLength: authToken.length,
+    });
     const result = await this.filesGatewayService.upload({
       userId: String(userId),
       file: req.body?.file ?? req.file,

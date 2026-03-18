@@ -25,8 +25,8 @@ export class SwaggerService {
       .setTitle('File Sharing Platform API Gateway')
       .setDescription(
         'API Gateway for File Sharing Platform microservices platform. ' +
-          'This gateway provides a single entry point for all microservices, handling authentication, ' +
-          'routing, and request proxying. The platform includes authentication, file sharing services, ' ,
+        'This gateway provides a single entry point for all microservices, handling authentication, ' +
+        'routing, and request proxying. The platform includes authentication, file sharing services, ',
       )
       .setVersion('1.0.0')
       .setContact(
@@ -98,11 +98,15 @@ export class SwaggerService {
 
     // Swagger UI options
     const swaggerOptions: any = {
-      customSiteTitle: 'Vonova API Gateway Documentation',
+      customSiteTitle: 'File Sharing API Gateway Documentation',
       customfavIcon: '/favicon.ico',
       customCss: '.swagger-ui .topbar { display: none }',
       swaggerOptions: {
         persistAuthorization: true,
+        requestInterceptor: (request: any) => {
+          request.credentials = 'include';
+          return request;
+        },
         displayRequestDuration: true,
         filter: true,
         showExtensions: true,
@@ -122,7 +126,7 @@ export class SwaggerService {
             [swaggerUser]: swaggerPassword,
           },
           challenge: true,
-          realm: 'Vonova API Gateway',
+          realm: 'File Sharing API Gateway',
         }),
       );
     }

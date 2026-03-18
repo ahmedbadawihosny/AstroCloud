@@ -20,6 +20,8 @@ async function bootstrap() {
   // Security
   app.use(helmet());
 
+  const isProduction = configuration().NODE_ENV === 'production';
+
   // CORS configuration
   const rawOrigins = configuration().CORS_ORIGIN;
   const parsedOrigins =
@@ -94,7 +96,7 @@ async function bootstrap() {
 
   // Logging with morgan (for HTTP request logging to console)
   // File logging is handled by LoggerService and LoggingInterceptor
-  if (configuration().NODE_ENV === 'development') {
+  if (!isProduction) {
     app.use(morgan('dev'));
   } else {
     app.use(morgan('combined'));
