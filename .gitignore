@@ -4,6 +4,9 @@ node_modules
 # Build
 dist
 build
+# Accidental tsc output next to sources (common package builds to dist/)
+packages/common/src/**/*.js
+packages/common/src/**/*.d.ts
 *.tsbuildinfo
 
 # Environment

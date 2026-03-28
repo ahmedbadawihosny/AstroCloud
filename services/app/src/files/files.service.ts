@@ -4,28 +4,26 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { RpcException } from '@nestjs/microservices';
-import { Model, Types } from 'mongoose';
 import { randomUUID, createHash } from 'crypto';
-import configuration from '../auth/common/config/configuration';
-import { File, FileDocument } from './file.schema';
+import configuration from './common/config/configuration';
+import { FileEntity } from '../database/entities';
+import { FILES_DB } from '../database/typeorm-connections';
 import { StorageService } from './storage.service';
 import { ShareService } from './share.service';
 import { NatsClient, EVENTS } from '@file-sharing-app/common';
 
-function toObjectId(id: string) {
-  return new Types.ObjectId(id);
-}
-
 @Injectable()
 export class FilesService {
   constructor(
-    @InjectModel(File.name) private readonly fileModel: Model<FileDocument>,
+    @InjectRepository(FileEntity, FILES_DB)
+    private readonly fileRepo: Repository<FileEntity>,
     private readonly storageService: StorageService,
     private readonly nats: NatsClient,
     private readonly shareService: ShareService,
-  ) { }
+  ) {}
 
   private get maxUploadSizeBytes() {
     return configuration().FILES.MAX_UPLOAD_SIZE_BYTES;
@@ -35,13 +33,13 @@ export class FilesService {
     return configuration().FILES.DOWNLOAD_URL_EXPIRES_IN_SECONDS;
   }
 
-  private async buildFilePayload(doc: any) {
+  private async buildFilePayload(doc: FileEntity) {
     const downloadUrl = await this.storageService.provider.getFileUrl(
       doc.storageKey,
     );
 
     return {
-      fileId: doc._id.toString(),
+      fileId: doc.id,
       originalName: doc.originalName,
       size: doc.size,
       mimeType: doc.mimeType,
@@ -61,7 +59,6 @@ export class FilesService {
     file: unknown;
     metadata?: Record<string, unknown>;
   }) {
-    const userId = toObjectId(payload.userId);
     const file = payload.file as {
       buffer?: Buffer;
       originalname?: string;
@@ -75,7 +72,9 @@ export class FilesService {
       });
     }
 
-    const buffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer as any);
+    const buffer = Buffer.isBuffer(file.buffer)
+      ? file.buffer
+      : Buffer.from(file.buffer as any);
     const originalName = (file?.originalname as string) || 'file';
     const mimeType = (file?.mimetype as string) || 'application/octet-stream';
 
@@ -92,8 +91,8 @@ export class FilesService {
 
     await this.storageService.provider.uploadFile(buffer, storageKey, mimeType);
 
-    const doc = await this.fileModel.create({
-      userId,
+    const doc = this.fileRepo.create({
+      userId: payload.userId,
       originalName,
       storageKey,
       size: buffer.length,
@@ -102,16 +101,17 @@ export class FilesService {
       metadata: payload.metadata ?? {},
       deletedAt: null,
     });
+    await this.fileRepo.save(doc);
 
     try {
       await this.nats.publish(EVENTS.FILE_UPLOADED, {
-        fileId: doc._id.toString(),
+        fileId: doc.id,
         userId: payload.userId,
         filename: doc.originalName,
         size: doc.size,
         mimeType: doc.mimeType,
         checksumSha256,
-        createdAt: (doc as any).createdAt?.toISOString?.() ?? new Date().toISOString(),
+        createdAt: doc.createdAt.toISOString(),
       });
     } catch (err) {
       console.warn('[FilesService] file_uploaded publish failed:', err);
@@ -124,24 +124,24 @@ export class FilesService {
   }
 
   async list(userId: string) {
-    const list = await this.fileModel
-      .find({ userId: toObjectId(userId), deletedAt: null })
-      .sort({ createdAt: -1 })
-      .lean();
+    const list = await this.fileRepo.find({
+      where: { userId, deletedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
 
     return {
       message: 'Files listed',
       data: await Promise.all(
         list.map(async (f) => ({
-          fileId: (f as any)._id.toString(),
+          fileId: f.id,
           originalName: f.originalName,
           size: f.size,
           mimeType: f.mimeType,
-          checksumSha256: (f as any).checksumSha256 ?? null,
-          metadata: (f as any).metadata ?? {},
-          createdAt: (f as { createdAt?: Date }).createdAt,
+          checksumSha256: f.checksumSha256 ?? null,
+          metadata: f.metadata ?? {},
+          createdAt: f.createdAt,
           downloadUrl: await this.storageService.provider.getFileUrl(
-            (f as any).storageKey,
+            f.storageKey,
           ),
           downloadUrlExpiresAt: new Date(
             Date.now() + this.downloadUrlTtlSeconds * 1000,
@@ -152,15 +152,17 @@ export class FilesService {
   }
 
   async get(fileId: string, userId: string) {
-    const doc = await this.fileModel
-      .findOne({
-        _id: toObjectId(fileId),
-        userId: toObjectId(userId),
-        deletedAt: null,
-      })
-      .exec();
+    const doc = await this.fileRepo.findOne({
+      where: { id: fileId, userId, deletedAt: IsNull() },
+    });
 
-    if (!doc) throw new RpcException({ statusCode: 404, message: 'File not found', error: 'Not Found' });
+    if (!doc) {
+      throw new RpcException({
+        statusCode: 404,
+        message: 'File not found',
+        error: 'Not Found',
+      });
+    }
 
     return {
       message: 'File retrieved',
@@ -169,24 +171,26 @@ export class FilesService {
   }
 
   async delete(fileId: string, userId: string) {
-    const doc = await this.fileModel
-      .findOne({
-        _id: toObjectId(fileId),
-        userId: toObjectId(userId),
-        deletedAt: null,
-      })
-      .exec();
+    const doc = await this.fileRepo.findOne({
+      where: { id: fileId, userId, deletedAt: IsNull() },
+    });
 
-    if (!doc) throw new RpcException({ statusCode: 404, message: 'File not found', error: 'Not Found' });
+    if (!doc) {
+      throw new RpcException({
+        statusCode: 404,
+        message: 'File not found',
+        error: 'Not Found',
+      });
+    }
 
     await this.storageService.provider.deleteFile(doc.storageKey);
     const deletedAt = new Date();
     doc.deletedAt = deletedAt;
-    await doc.save();
+    await this.fileRepo.save(doc);
 
     try {
       await this.nats.publish(EVENTS.FILE_DELETED, {
-        fileId: doc._id.toString(),
+        fileId: doc.id,
         userId,
         deletedAt: deletedAt.toISOString(),
       });
@@ -197,27 +201,76 @@ export class FilesService {
     return {
       message: 'File deleted',
       data: {
-        fileId: doc._id.toString(),
+        fileId: doc.id,
         deletedAt: deletedAt.toISOString(),
       },
     };
   }
 
   async share(fileId: string, userId: string, expiresInSeconds: number) {
-    const safeExpiresInSeconds = Math.max(60, Math.min(Number(expiresInSeconds) || 0, 7 * 24 * 60 * 60));
+    const safeExpiresInSeconds = Math.max(
+      60,
+      Math.min(Number(expiresInSeconds) || 0, 7 * 24 * 60 * 60),
+    );
     const shareLink = await this.shareService.createShare(
       fileId,
       userId,
       safeExpiresInSeconds,
     );
 
+    try {
+      await this.nats.publish(EVENTS.FILE_SHARED, {
+        fileId,
+        userId,
+        shareId: shareLink.shareId,
+        expiresAt: shareLink.expiresAt.toISOString(),
+      });
+    } catch (err) {
+      console.warn('[FilesService] file_shared publish failed:', err);
+    }
+
     return {
       message: 'Share created',
       data: {
         fileId,
-        token: shareLink.shareId,
+        token: shareLink.token,
+        shareId: shareLink.shareId,
         expiresAt: shareLink.expiresAt,
-        shareUrl: `/api/v1/share/${shareLink.shareId}`,
+        shareUrl: `/api/v1/share/${shareLink.token}`,
+      },
+    };
+  }
+
+  async getShareDownload(token: string) {
+    const resolved = await this.shareService.resolveByPlainToken(token);
+    if (!resolved) {
+      throw new RpcException({
+        statusCode: 404,
+        message: 'Share not found or expired',
+        error: 'Not Found',
+      });
+    }
+
+    const file = await this.fileRepo.findOne({
+      where: { id: resolved.fileId, deletedAt: IsNull() },
+    });
+    if (!file) {
+      throw new RpcException({
+        statusCode: 404,
+        message: 'File not found',
+        error: 'Not Found',
+      });
+    }
+
+    const downloadUrl = await this.storageService.provider.getFileUrl(
+      file.storageKey,
+    );
+    await this.shareService.incrementDownloadCount(resolved.shareLinkId);
+
+    return {
+      data: {
+        downloadUrl,
+        originalName: file.originalName,
       },
     };
   }

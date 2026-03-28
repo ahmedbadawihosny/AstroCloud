@@ -1,0 +1,35 @@
+# Git / IDE
+.git
+.github
+.cursor
+**/.DS_Store
+
+# Dependencies (installed in image)
+**/node_modules
+
+# Build outputs (rebuilt in Dockerfile)
+**/dist
+**/coverage
+*.tsbuildinfo
+
+# Env & local secrets
+.env
+.env.*
+!.env.example
+
+# Heavy paths (keep package.json for pnpm workspace lockfile)
+mobile/android
+mobile/ios
+mobile/.expo
+docker/nginx
+*.md
+
+# Logs & caches
+*.log
+.npm
+.pnpm-store
+.cache
+
+# Tests (optional trim)
+**/*.spec.ts
+**/*.e2e-spec.ts

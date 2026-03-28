@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule } from '@nestjs/config';
@@ -11,17 +11,13 @@ import { NotificationModule } from './notification/notification.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import configuration from './common/config/configuration';
 import {
-  User,
-  UserSchema,
-  Account,
-  AccountSchema,
-  RefreshToken,
-  RefreshTokenSchema,
-  EmailVerification,
-  EmailVerificationSchema,
-  PasswordReset,
-  PasswordResetSchema,
-} from './schema/index';
+  UserEntity,
+  AccountEntity,
+  RefreshTokenEntity,
+  EmailVerificationEntity,
+  PasswordResetEntity,
+} from '../database/entities';
+import { AUTH_DB } from '../database/typeorm-connections';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -30,13 +26,16 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       isGlobal: true,
       load: [configuration],
     }),
-    MongooseModule.forFeature([
-      { name: User.name, schema: UserSchema },
-      { name: Account.name, schema: AccountSchema },
-      { name: RefreshToken.name, schema: RefreshTokenSchema },
-      { name: EmailVerification.name, schema: EmailVerificationSchema },
-      { name: PasswordReset.name, schema: PasswordResetSchema },
-    ]),
+    TypeOrmModule.forFeature(
+      [
+        UserEntity,
+        AccountEntity,
+        RefreshTokenEntity,
+        EmailVerificationEntity,
+        PasswordResetEntity,
+      ],
+      AUTH_DB,
+    ),
     JwtModule.register({
       secret:
         configuration().JWT.JWT_ACCESS_SECRET ||
@@ -55,4 +54,4 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

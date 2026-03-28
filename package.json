@@ -4,12 +4,15 @@
   "scripts": {
     "build": "pnpm -r run build",
     "dev": "pnpm -r --parallel run dev",
-    "dev:services": "concurrently -n gateway,auth,file,notif \"pnpm run dev:gateway\" \"pnpm run dev:auth\" \"pnpm run dev:file\" \"pnpm run dev:notification\"",
+    "dev:services": "concurrently -n gateway,app \"pnpm run dev:gateway\" \"pnpm run dev:app\"",
     "dev:gateway": "pnpm --filter api-gateway run dev",
-    "dev:auth": "pnpm --filter auth-service run dev",
-    "dev:file": "pnpm --filter file-service run dev",
-    "dev:notification": "pnpm --filter notification-service run dev",
-    "dev:frontend": "pnpm --filter frontend run dev"
+    "dev:app": "pnpm --filter @file-sharing-app/app-service run dev",
+    "dev:frontend": "pnpm --filter frontend run dev",
+    "dev:mobile": "pnpm --filter mobile run dev",
+    "migration:run": "pnpm --filter @file-sharing-app/app-service run migration:run",
+    "migration:generate:auth": "pnpm --filter @file-sharing-app/app-service run migration:generate:auth",
+    "migration:generate:files": "pnpm --filter @file-sharing-app/app-service run migration:generate:files",
+    "migration:revert": "pnpm --filter @file-sharing-app/app-service run migration:revert"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",

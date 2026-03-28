@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "file-sharing-mobile",
+    "slug": "file-sharing-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "filesharing",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android"]
+  }
+}

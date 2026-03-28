@@ -6,7 +6,10 @@ import { AppModule } from './app.module';
 
 // Load .env from service directory (works when run from monorepo root via pnpm run dev)
 dotenv.config({ path: path.join(process.cwd(), '.env') });
-if (!process.env.MONGODB_URI_AUTH || !process.env.MONGODB_URI_FILE_SHARING) {
+if (
+  !process.env.DATABASE_URL_AUTH ||
+  !process.env.DATABASE_URL_FILE_SHARING
+) {
   dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 }
 

@@ -1,19 +1,14 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountService } from './account.service';
 import { AccountController } from './account.controller';
-import { User, UserSchema } from '../schema/user.schema';
-import { Account, AccountSchema } from '../schema/account.schema';
+import { UserEntity, AccountEntity } from '../../database/entities';
+import { AUTH_DB } from '../../database/typeorm-connections';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: User.name, schema: UserSchema },
-      { name: Account.name, schema: AccountSchema },
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([UserEntity, AccountEntity], AUTH_DB)],
   controllers: [AccountController],
   providers: [AccountService],
   exports: [AccountService],
 })
-export class AccountModule { }
+export class AccountModule {}

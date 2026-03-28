@@ -1,10 +1,20 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { NatsModule } from '@file-sharing-app/common';
 import { AuthModule } from './auth/auth.module';
 import { FilesModule } from './files/files.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import {
+  UserEntity,
+  AccountEntity,
+  RefreshTokenEntity,
+  EmailVerificationEntity,
+  PasswordResetEntity,
+  FileEntity,
+  ShareLinkEntity,
+} from './database/entities';
+import { AUTH_DB, FILES_DB } from './database/typeorm-connections';
 
 @Module({
   imports: [
@@ -12,11 +22,25 @@ import { NotificationsModule } from './notifications/notifications.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    MongooseModule.forRoot(process.env.MONGODB_URI_AUTH as string, {
-      dbName: 'auth_db',
+    TypeOrmModule.forRoot({
+      name: AUTH_DB,
+      type: 'postgres',
+      url: process.env.DATABASE_URL_AUTH,
+      entities: [
+        UserEntity,
+        AccountEntity,
+        RefreshTokenEntity,
+        EmailVerificationEntity,
+        PasswordResetEntity,
+      ],
+      synchronize: false,
     }),
-    MongooseModule.forRoot(process.env.MONGODB_URI_FILE_SHARING as string, {
-      dbName: 'file_sharing_db',
+    TypeOrmModule.forRoot({
+      name: FILES_DB,
+      type: 'postgres',
+      url: process.env.DATABASE_URL_FILE_SHARING,
+      entities: [FileEntity, ShareLinkEntity],
+      synchronize: false,
     }),
     NatsModule,
     AuthModule,

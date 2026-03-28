@@ -38,4 +38,9 @@ export class FilesController {
   share(@Payload() payload: CreateShareNatsDto) {
     return this.filesService.share(payload.fileId, payload.userId, payload.expiresInSeconds);
   }
+
+  @MessagePattern({ cmd: 'getShareDownload' })
+  getShareDownload(@Payload() payload: { token: string }) {
+    return this.filesService.getShareDownload(payload.token);
+  }
 }

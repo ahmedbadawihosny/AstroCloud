@@ -35,7 +35,12 @@ describe('NotificationsService', () => {
   });
 
   it('handles file shared events', () => {
-    const payload = { fileId: 'file123', userId: 'user123', shareToken: 'share123' };
+    const payload = {
+      fileId: 'file123',
+      userId: 'user123',
+      shareId: 'share-uuid',
+      expiresAt: new Date().toISOString(),
+    };
     const result = service.handleFileShared(payload);
     expect(result).toEqual({ accepted: true });
   });

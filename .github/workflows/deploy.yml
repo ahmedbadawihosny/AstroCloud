@@ -1,0 +1,52 @@
+name: Deploy
+
+# Run from the Actions tab after configuring repository secrets (see below).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (branch, tag, or SHA)"
+        required: true
+        default: "main"
+      ssh_port:
+        description: "SSH port on the server"
+        required: false
+        default: "22"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ inputs.ssh_port }}
+          script_stop: true
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch origin
+            git checkout "${{ inputs.ref }}"
+            git pull --ff-only || true
+            docker compose pull || true
+            docker compose build --pull
+            docker compose up -d --remove-orphans
+            docker compose ps
+
+# Required GitHub secrets (Settings → Secrets and variables → Actions):
+#   SSH_HOST          — server hostname or IP
+#   SSH_USER          — SSH login user
+#   SSH_PRIVATE_KEY   — private key (PEM), full multiline contents
+#   DEPLOY_PATH       — absolute path to this repo on the server (e.g. /opt/file-sharing-app)
+#
+#
+# On the server: clone this repo once, copy .env files, run migrations, then use this workflow.

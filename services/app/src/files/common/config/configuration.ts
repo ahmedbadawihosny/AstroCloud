@@ -7,7 +7,9 @@ export default function configuration() {
   return {
     NODE_ENV: process.env.NODE_ENV || 'development',
     DATABASE: {
-      MONGODB_URI_FILE_SHARING: process.env.MONGODB_URI_FILE_SHARING || 'mongodb://localhost:27017/file_sharing_db',
+      FILE_SHARING_URL:
+        process.env.DATABASE_URL_FILE_SHARING ||
+        'postgresql://localhost:5432/file_sharing_db',
     },
     NATS: {
       URL: process.env.NATS_URL || 'nats://localhost:4222',

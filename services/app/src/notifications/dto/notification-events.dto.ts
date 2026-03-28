@@ -69,7 +69,7 @@ export class FileSharedEventDto {
 
   @IsString()
   @IsDefined()
-  shareToken!: string;
+  shareId!: string;
 
   @IsOptional()
   expiresAt?: string;

@@ -4,26 +4,23 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, MoreThan } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { Client, RpcException } from '@nestjs/microservices';
+import { RpcException } from '@nestjs/microservices';
+import * as bcrypt from 'bcryptjs';
 import { WaitlistService } from './waitlist/waitlist.service';
 import { NotificationService } from './notification/notification.service';
 import configuration from './common/config/configuration';
 import type { UploadedFile } from './common/interfaces/file.interface';
 import {
-  User,
-  UserDocument,
-  Account,
-  AccountDocument,
-  RefreshToken,
-  RefreshTokenDocument,
-  EmailVerification,
-  EmailVerificationDocument,
-  PasswordReset,
-  PasswordResetDocument,
-} from './schema';
+  UserEntity,
+  AccountEntity,
+  RefreshTokenEntity,
+  EmailVerificationEntity,
+  PasswordResetEntity,
+} from '../database/entities';
+import { AUTH_DB } from '../database/typeorm-connections';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -40,24 +37,26 @@ import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel(User.name)
-    private readonly userModel: Model<UserDocument>,
+    @InjectRepository(UserEntity, AUTH_DB)
+    private readonly userRepo: Repository<UserEntity>,
+    @InjectRepository(AccountEntity, AUTH_DB)
+    private readonly accountRepo: Repository<AccountEntity>,
+    @InjectRepository(RefreshTokenEntity, AUTH_DB)
+    private readonly refreshTokenRepo: Repository<RefreshTokenEntity>,
+    @InjectRepository(EmailVerificationEntity, AUTH_DB)
+    private readonly emailVerificationRepo: Repository<EmailVerificationEntity>,
+    @InjectRepository(PasswordResetEntity, AUTH_DB)
+    private readonly passwordResetRepo: Repository<PasswordResetEntity>,
     private readonly nats: NatsClient,
-    @InjectModel(Account.name)
-    private readonly accountModel: Model<AccountDocument>,
-    @InjectModel(RefreshToken.name)
-    private readonly refreshTokenModel: Model<RefreshTokenDocument>,
-    @InjectModel(EmailVerification.name)
-    private readonly emailVerificationModel: Model<EmailVerificationDocument>,
-    @InjectModel(PasswordReset.name)
-    private readonly passwordResetModel: Model<PasswordResetDocument>,
     private readonly jwtService: JwtService,
     @Inject(forwardRef(() => WaitlistService))
     private readonly waitlistService: WaitlistService,
     private readonly notificationService: NotificationService,
-  ) { }
+  ) {}
 
-  // ========== Helpers ==========
+  private async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, 10);
+  }
 
   private signAccessToken(userId: string, role: string) {
     return this.jwtService.sign(
@@ -82,12 +81,12 @@ export class AuthService {
     );
   }
 
-  // ========== Register Flow Services ==========
-
   async register(dto: RegisterDto) {
     const normalizedEmail = dto.email.trim().toLowerCase();
 
-    const existing = await this.userModel.findOne({ email: normalizedEmail }).exec();
+    const existing = await this.userRepo.findOne({
+      where: { email: normalizedEmail },
+    });
     if (existing) {
       throw new RpcException({
         statusCode: 400,
@@ -97,19 +96,29 @@ export class AuthService {
     }
 
     try {
-      const user = new this.userModel({
+      const passwordHash = await this.hashPassword(dto.password);
+      const user = this.userRepo.create({
         name: dto.name,
         email: normalizedEmail,
-        password: dto.password,
+        password: passwordHash,
         role: 'PENDING',
         isVerified: false,
         isActive: true,
+        profilePictureUrl: null,
+        knowAboutUs: null,
+        couponCode: null,
+        expireCouponCode: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+        isPremiumAccount: false,
+        lastLogin: null,
+        bio: null,
+        dateOfBirth: null,
+        address: null,
       });
-      await user.save();
+      await this.userRepo.save(user);
 
       try {
         await this.nats.publish(EVENTS.USER_CREATED, {
-          userId: user._id.toString(),
+          userId: user.id,
           email: user.email,
           createdAt: new Date().toISOString(),
         });
@@ -117,22 +126,26 @@ export class AuthService {
         console.warn('[AuthService] user_created publish failed:', err);
       }
 
-      const account = new this.accountModel({
-        userId: user._id,
+      const account = this.accountRepo.create({
+        userId: user.id,
         provider: ProviderEnum.EMAIL,
         providerId: normalizedEmail,
+        refreshToken: null,
+        tokenExpiry: null,
       });
-      await account.save();
+      await this.accountRepo.save(account);
 
       const verificationCode = Math.floor(
         100000 + Math.random() * 900000,
       ).toString();
 
-      await this.emailVerificationModel.create({
+      const ev = this.emailVerificationRepo.create({
         email: normalizedEmail,
         verificationCode,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        used: false,
       });
+      await this.emailVerificationRepo.save(ev);
 
       await this.notificationService.sendEmailVerification({
         email: normalizedEmail,
@@ -144,8 +157,7 @@ export class AuthService {
         message: 'User registered successfully, verification code sent',
       };
     } catch (err: any) {
-      if (err?.code === 11000) {
-        // Mongo duplicate key safety net
+      if (err?.code === '23505') {
         throw new RpcException({
           statusCode: 400,
           message: 'Email already exists',
@@ -162,9 +174,8 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    const user = await this.userModel
-      .findOne({ email: dto.email.toLowerCase() })
-      .exec();
+    const email = dto.email.toLowerCase();
+    const user = await this.userRepo.findOne({ where: { email } });
     if (!user) {
       throw new RpcException({
         statusCode: 404,
@@ -173,11 +184,13 @@ export class AuthService {
       });
     }
 
-    const record = await this.emailVerificationModel.findOne({
-      email: dto.email,
-      verificationCode: dto.code,
-      used: false,
-      expiresAt: { $gt: new Date() },
+    const record = await this.emailVerificationRepo.findOne({
+      where: {
+        email,
+        verificationCode: dto.code,
+        used: false,
+        expiresAt: MoreThan(new Date()),
+      },
     });
 
     if (!record) {
@@ -189,10 +202,10 @@ export class AuthService {
     }
 
     record.used = true;
-    await record.save();
+    await this.emailVerificationRepo.save(record);
 
     user.isVerified = true;
-    await user.save();
+    await this.userRepo.save(user);
 
     return { message: 'Email verified successfully' };
   }
@@ -200,7 +213,6 @@ export class AuthService {
   async uploadProfilePicture(
     dto: UploadProfilePictureDto & { file: UploadedFile },
   ) {
-    // Convert base64 back to buffer if needed
     const fileBuffer =
       typeof dto.file.buffer === 'string'
         ? Buffer.from(dto.file.buffer, 'base64')
@@ -219,7 +231,7 @@ export class AuthService {
       });
     }
 
-    const user = await this.userModel.findById(dto.userId).exec();
+    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
     if (!user) {
       throw new RpcException({
         statusCode: 404,
@@ -253,7 +265,7 @@ export class AuthService {
     const url = `https://${configuration().AWS_S3_BUCKET}.s3.${configuration().AWS_S3_REGION}.amazonaws.com/${key}`;
 
     user.profilePictureUrl = url;
-    await user.save();
+    await this.userRepo.save(user);
 
     return {
       message: 'Profile picture uploaded successfully',
@@ -261,18 +273,15 @@ export class AuthService {
     };
   }
 
-  private omitUserPassword(user: UserDocument) {
-    const userObject = user.toObject();
-    delete userObject.password;
-    return userObject;
+  private omitUserPassword(user: UserEntity) {
+    const { password: _p, ...rest } = user;
+    return rest;
   }
 
-  // ========== Login & Tokens ==========
-
   async login(dto: LoginDto) {
-    const account = await this.accountModel
-      .findOne({ provider: ProviderEnum.EMAIL, providerId: dto.email })
-      .exec();
+    const account = await this.accountRepo.findOne({
+      where: { provider: ProviderEnum.EMAIL, providerId: dto.email },
+    });
     if (!account) {
       throw new RpcException({
         statusCode: 404,
@@ -281,8 +290,13 @@ export class AuthService {
       });
     }
 
-    const user = await this.userModel.findById(account.userId).exec();
-    if (!user) {
+    const userWithPassword = await this.userRepo
+      .createQueryBuilder('u')
+      .addSelect('u.password')
+      .where('u.id = :id', { id: account.userId })
+      .getOne();
+
+    if (!userWithPassword?.password) {
       throw new RpcException({
         statusCode: 404,
         message: 'User not found for the given account',
@@ -290,23 +304,7 @@ export class AuthService {
       });
     }
 
-    // Secure password comparison using bcrypt (see UserSchema.comparePassword)
-    const userWithPassword = await this.userModel
-      .findById(account.userId)
-      .select('+password')
-      .exec();
-
-    if (!userWithPassword) {
-      throw new RpcException({
-        statusCode: 404,
-        message: 'User not found for the given account',
-        error: 'Not Found',
-      });
-    }
-
-    const isMatch = await (userWithPassword as any).comparePassword(
-      dto.password,
-    );
+    const isMatch = await bcrypt.compare(dto.password, userWithPassword.password);
     if (!isMatch) {
       throw new RpcException({
         statusCode: 400,
@@ -315,7 +313,7 @@ export class AuthService {
       });
     }
 
-    if (!user.isVerified) {
+    if (!userWithPassword.isVerified) {
       throw new RpcException({
         statusCode: 400,
         message: 'You should verify your email first',
@@ -324,33 +322,34 @@ export class AuthService {
     }
 
     userWithPassword.lastLogin = new Date();
-    await userWithPassword.save();
+    await this.userRepo.save(userWithPassword);
 
     const accessToken = this.signAccessToken(
-      String(userWithPassword._id),
+      userWithPassword.id,
       userWithPassword.role,
     );
     const refreshToken = this.signRefreshToken(
-      String(userWithPassword._id),
+      userWithPassword.id,
       userWithPassword.role,
     );
 
-    await this.refreshTokenModel
-      .deleteMany({ userId: userWithPassword._id })
-      .exec();
-    await this.refreshTokenModel.create({
-      userId: userWithPassword._id,
-      tokenHash: refreshToken,
-      jti: `${userWithPassword._id.toString()}-${Date.now()}`,
-      deviceHash: dto.userAgent,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    });
+    await this.refreshTokenRepo.delete({ userId: userWithPassword.id });
+    await this.refreshTokenRepo.save(
+      this.refreshTokenRepo.create({
+        userId: userWithPassword.id,
+        tokenHash: refreshToken,
+        jti: `${userWithPassword.id}-${Date.now()}`,
+        deviceHash: dto.userAgent,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }),
+    );
 
     return {
       message: 'User logged in successfully',
       data: {
         user: {
-          _id: userWithPassword._id,
+          _id: userWithPassword.id,
+          id: userWithPassword.id,
           name: userWithPassword.name,
           email: userWithPassword.email,
           role: userWithPassword.role,
@@ -374,7 +373,7 @@ export class AuthService {
           'fallback-refresh-secret-key',
       });
 
-      const user = await this.userModel.findById(payload.userId).exec();
+      const user = await this.userRepo.findOne({ where: { id: payload.userId } });
       if (!user) {
         throw new RpcException({
           statusCode: 401,
@@ -383,17 +382,19 @@ export class AuthService {
         });
       }
 
-      const accessToken = this.signAccessToken(String(user._id), user.role);
-      const refreshToken = this.signRefreshToken(String(user._id), user.role);
+      const accessToken = this.signAccessToken(user.id, user.role);
+      const refreshToken = this.signRefreshToken(user.id, user.role);
 
-      await this.refreshTokenModel.deleteMany({ userId: user._id }).exec();
-      await this.refreshTokenModel.create({
-        userId: user._id,
-        tokenHash: refreshToken,
-        jti: `${user._id.toString()}-${Date.now()}`,
-        deviceHash: 'unknown',
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      });
+      await this.refreshTokenRepo.delete({ userId: user.id });
+      await this.refreshTokenRepo.save(
+        this.refreshTokenRepo.create({
+          userId: user.id,
+          tokenHash: refreshToken,
+          jti: `${user.id}-${Date.now()}`,
+          deviceHash: 'unknown',
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        }),
+      );
 
       return {
         message: 'Refreshed token successfully',
@@ -410,8 +411,7 @@ export class AuthService {
   }
 
   async logout(token: string) {
-    // Invalidate the given refresh token by deleting matching record
-    await this.refreshTokenModel.deleteOne({ tokenHash: token }).exec();
+    await this.refreshTokenRepo.delete({ tokenHash: token });
     return { message: 'Logged out successfully' };
   }
 
@@ -424,10 +424,9 @@ export class AuthService {
             configuration().JWT.JWT_ACCESS_SECRET || 'fallback-secret-key',
         },
       );
-      const user = await this.userModel
-        .findById(payload.userId)
-        .select('-password -couponCode -expireCouponCode -knowAboutUs')
-        .exec();
+      const user = await this.userRepo.findOne({
+        where: { id: payload.userId },
+      });
       if (!user) {
         throw new RpcException({
           statusCode: 404,
@@ -437,7 +436,7 @@ export class AuthService {
       }
       return {
         message: 'Current user fetched successfully',
-        user,
+        user: this.omitUserPassword(user),
       };
     } catch (e) {
       throw new RpcException({
@@ -448,10 +447,8 @@ export class AuthService {
     }
   }
 
-  // ========== Password Reset ==========
-
   async requestResetPassword(dto: RequestResetPasswordDto) {
-    const user = await this.userModel.findOne({ email: dto.email }).exec();
+    const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user) {
       throw new RpcException({
         statusCode: 404,
@@ -462,12 +459,15 @@ export class AuthService {
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    await this.passwordResetModel.deleteMany({ email: dto.email }).exec();
-    await this.passwordResetModel.create({
-      email: dto.email,
-      resetCode,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-    });
+    await this.passwordResetRepo.delete({ email: dto.email });
+    await this.passwordResetRepo.save(
+      this.passwordResetRepo.create({
+        email: dto.email,
+        resetCode,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        used: false,
+      }),
+    );
 
     await this.notificationService.sendPasswordResetCode({
       email: dto.email,
@@ -478,11 +478,13 @@ export class AuthService {
   }
 
   async verifyResetCode(dto: VerifyResetCodeDto) {
-    const record = await this.passwordResetModel.findOne({
-      email: dto.email,
-      resetCode: dto.code,
-      used: false,
-      expiresAt: { $gt: new Date() },
+    const record = await this.passwordResetRepo.findOne({
+      where: {
+        email: dto.email,
+        resetCode: dto.code,
+        used: false,
+        expiresAt: MoreThan(new Date()),
+      },
     });
 
     if (!record) {
@@ -494,7 +496,7 @@ export class AuthService {
     }
 
     record.used = true;
-    await record.save();
+    await this.passwordResetRepo.save(record);
 
     const resetToken = this.jwtService.sign(
       { email: dto.email, type: 'password-reset' },
@@ -516,9 +518,9 @@ export class AuthService {
         throw new Error('Invalid reset token type');
       }
 
-      const user = await this.userModel
-        .findOne({ email: payload.email })
-        .exec();
+      const user = await this.userRepo.findOne({
+        where: { email: payload.email },
+      });
       if (!user) {
         throw new RpcException({
           statusCode: 404,
@@ -527,10 +529,10 @@ export class AuthService {
         });
       }
 
-      user.password = dto.newPassword;
-      await user.save(); // triggers pre-save hook to hash password
+      user.password = await this.hashPassword(dto.newPassword);
+      await this.userRepo.save(user);
 
-      await this.refreshTokenModel.deleteMany({ userId: user._id }).exec();
+      await this.refreshTokenRepo.delete({ userId: user.id });
 
       return { message: 'Password reset successfully' };
     } catch (e) {

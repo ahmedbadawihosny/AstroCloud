@@ -2,25 +2,26 @@ import { Injectable } from '@nestjs/common';
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { STORAGE_PROVIDER, StorageProvider } from './storage.interface';
-import configuration from '../auth/common/config/configuration';
+import configuration from './common/config/configuration';
 
 @Injectable()
 export class S3StorageService implements StorageProvider {
   private readonly s3Client: S3Client;
 
   constructor() {
+    const s3 = configuration().AWS_S3;
     this.s3Client = new S3Client({
-      region: configuration().AWS_S3_REGION,
+      region: s3.REGION,
       credentials: {
-        accessKeyId: configuration().AWS_S3_ACCESS_KEY_ID!,
-        secretAccessKey: configuration().AWS_S3_SECRET_ACCESS_KEY!,
+        accessKeyId: s3.ACCESS_KEY_ID!,
+        secretAccessKey: s3.SECRET_ACCESS_KEY!,
       },
     });
   }
 
   async uploadFile(file: Buffer, key: string, contentType: string): Promise<string> {
     const command = new PutObjectCommand({
-      Bucket: configuration().AWS_S3_BUCKET!,
+      Bucket: configuration().AWS_S3.BUCKET!,
       Key: key,
       Body: file,
       ContentType: contentType,
@@ -32,16 +33,17 @@ export class S3StorageService implements StorageProvider {
 
   async getFileUrl(key: string): Promise<string> {
     const command = new GetObjectCommand({
-      Bucket: configuration().AWS_S3_BUCKET!,
+      Bucket: configuration().AWS_S3.BUCKET!,
       Key: key,
     });
 
-    return await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+    const expiresIn = configuration().FILES.DOWNLOAD_URL_EXPIRES_IN_SECONDS;
+    return await getSignedUrl(this.s3Client, command, { expiresIn });
   }
 
   async deleteFile(key: string): Promise<void> {
     const command = new DeleteObjectCommand({
-      Bucket: configuration().AWS_S3_BUCKET!,
+      Bucket: configuration().AWS_S3.BUCKET!,
       Key: key,
     });
 

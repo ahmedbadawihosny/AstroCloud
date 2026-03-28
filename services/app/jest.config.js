@@ -1,7 +1,7 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
-  roots: ["<rootDir>/src", "<rootDir>/test"],
+  roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.ts", "**/?(*.)+(spec|test).ts"],
   testPathIgnorePatterns: ["<rootDir>/test/integration/"],
   transform: {
@@ -15,7 +15,7 @@ module.exports = {
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"],
-  setupFilesAfterEnv: ["<rootDir>/test/jest-setup.ts"],
+  setupFilesAfterEnv: ["<rootDir>/src/auth/test/jest-setup.ts"],
   testTimeout: 30000,
   moduleNameMapper: {
     "^@file-sharing-app/common(.*)$": "<rootDir>/../../packages/common/src$1",

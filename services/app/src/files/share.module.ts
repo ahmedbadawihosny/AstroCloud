@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ShareService } from './share.service';
-import { File, FileSchema } from './file.schema';
+import { FileEntity, ShareLinkEntity } from '../database/entities';
+import { FILES_DB } from '../database/typeorm-connections';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: File.name, schema: FileSchema }])],
+  imports: [TypeOrmModule.forFeature([FileEntity, ShareLinkEntity], FILES_DB)],
   providers: [ShareService],
   exports: [ShareService],
 })

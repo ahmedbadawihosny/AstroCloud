@@ -1,7 +1,9 @@
 export default function configuration() {
   return ({
     DATABASE: {
-      MONGODB_URI_AUTH: process.env.MONGODB_URI_AUTH || 'mongodb://localhost:27017/auth_db',
+      AUTH_URL:
+        process.env.DATABASE_URL_AUTH ||
+        'postgresql://localhost:5432/auth_db',
     },
     JWT: {
       JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || 'your-access-secret',

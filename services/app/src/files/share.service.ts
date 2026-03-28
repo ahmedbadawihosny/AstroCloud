@@ -1,84 +1,97 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { RpcException } from '@nestjs/microservices';
-import { File, FileDocument } from './file.schema';
-import { v4 as uuidv4 } from 'uuid';
+import { createHash, randomBytes } from 'crypto';
+import { FileEntity, ShareLinkEntity } from '../database/entities';
+import { FILES_DB } from '../database/typeorm-connections';
 
-export interface ShareLink {
+export interface ShareLinkResult {
   shareId: string;
+  token: string;
   fileId: string;
   userId: string;
-  expiresAt?: Date;
+  expiresAt: Date;
   createdAt: Date;
-  downloadCount: number;
-  maxDownloads?: number;
+}
+
+export interface ResolvedShare {
+  shareLinkId: string;
+  fileId: string;
+  userId: string;
+}
+
+function hashShareToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
 @Injectable()
 export class ShareService {
-  private shareLinks: Map<string, ShareLink> = new Map();
-
   constructor(
-    @InjectModel(File.name)
-    private readonly fileModel: Model<FileDocument>,
+    @InjectRepository(FileEntity, FILES_DB)
+    private readonly fileRepo: Repository<FileEntity>,
+    @InjectRepository(ShareLinkEntity, FILES_DB)
+    private readonly shareRepo: Repository<ShareLinkEntity>,
   ) {}
 
-  async createShare(fileId: string, userId: string, expiresInSeconds?: number): Promise<ShareLink> {
-    const file = await this.fileModel.findOne({ _id: fileId, userId }).exec();
+  async createShare(
+    fileId: string,
+    userId: string,
+    expiresInSeconds: number,
+  ): Promise<ShareLinkResult> {
+    const file = await this.fileRepo.findOne({
+      where: { id: fileId, userId, deletedAt: IsNull() },
+    });
     if (!file) {
-      throw new RpcException('File not found');
+      throw new RpcException({
+        statusCode: 404,
+        message: 'File not found',
+        error: 'Not Found',
+      });
     }
 
-    const shareId = uuidv4();
-    const shareLink: ShareLink = {
-      shareId,
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = hashShareToken(token);
+    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+
+    const row = this.shareRepo.create({
       fileId,
       userId,
-      createdAt: new Date(),
+      tokenHash,
+      expiresAt,
       downloadCount: 0,
-      maxDownloads: expiresInSeconds ? 100 : undefined, // Default max downloads
+    });
+    await this.shareRepo.save(row);
+
+    return {
+      shareId: row.id,
+      token,
+      fileId,
+      userId,
+      expiresAt,
+      createdAt: row.createdAt,
     };
-
-    if (expiresInSeconds) {
-      shareLink.expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
-    }
-
-    this.shareLinks.set(shareId, shareLink);
-    return shareLink;
   }
 
-  async getShare(shareId: string): Promise<ShareLink | null> {
-    const share = this.shareLinks.get(shareId);
-    
-    if (!share) {
-      return null;
-    }
+  async resolveByPlainToken(plainToken: string): Promise<ResolvedShare | null> {
+    const tokenHash = hashShareToken(plainToken);
+    const share = await this.shareRepo.findOne({ where: { tokenHash } });
+    if (!share) return null;
+    if (share.expiresAt < new Date()) return null;
 
-    if (share.expiresAt && share.expiresAt < new Date()) {
-      this.shareLinks.delete(shareId);
-      return null;
-    }
+    const file = await this.fileRepo.findOne({
+      where: { id: share.fileId, deletedAt: IsNull() },
+    });
+    if (!file) return null;
 
-    if (share.maxDownloads && share.downloadCount >= share.maxDownloads) {
-      this.shareLinks.delete(shareId);
-      return null;
-    }
-
-    return share;
+    return {
+      shareLinkId: share.id,
+      fileId: share.fileId,
+      userId: share.userId,
+    };
   }
 
-  async incrementDownloadCount(shareId: string): Promise<void> {
-    const share = this.shareLinks.get(shareId);
-    if (share) {
-      share.downloadCount++;
-    }
-  }
-
-  async deleteShare(shareId: string, userId: string): Promise<void> {
-    const share = this.shareLinks.get(shareId);
-    if (share && share.userId === userId) {
-      this.shareLinks.delete(shareId);
-    }
+  async incrementDownloadCount(shareLinkId: string): Promise<void> {
+    await this.shareRepo.increment({ id: shareLinkId }, 'downloadCount', 1);
   }
 }

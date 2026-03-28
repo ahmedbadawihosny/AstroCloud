@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
-import { File, FileSchema } from './file.schema';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { FileEntity } from '../database/entities';
+import { FILES_DB } from '../database/typeorm-connections';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
 import { StorageModule } from './storage.module';
@@ -8,7 +9,7 @@ import { ShareModule } from './share.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: File.name, schema: FileSchema }]),
+    TypeOrmModule.forFeature([FileEntity], FILES_DB),
     StorageModule,
     ShareModule,
   ],
@@ -16,4 +17,4 @@ import { ShareModule } from './share.module';
   providers: [FilesService],
   exports: [FilesService],
 })
-export class FilesModule { }
+export class FilesModule {}

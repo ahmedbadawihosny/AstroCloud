@@ -1,52 +1,37 @@
-# Multi-stage build for production optimization
-FROM node:18-alpine AS builder
-
+FROM node:20-alpine AS base
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY pnpm-workspace.yaml ./
-COPY packages/common/package.json packages/common/package.json
-COPY packages/common/*.js packages/common/
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY packages/common/package.json ./packages/common/
+COPY services/api-gateway/package.json ./services/api-gateway/
+COPY services/app/package.json ./services/app/
+COPY frontend/package.json ./frontend/
+COPY mobile/package.json ./mobile/
+RUN pnpm install --frozen-lockfile
 
-# Install pnpm and dependencies
-RUN npm install -g pnpm
-RUN pnpm install --no-frozen-lockfile
-
-# Copy source code
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN pnpm install && pnpm --filter @file-sharing-app/common run build && pnpm --filter @file-sharing-app/app-service run build
 
-# Build the application
-RUN pnpm run build
-
-# Production stage
-FROM node:18-alpine AS production
-
-# Create app directory
+FROM builder AS pruner
 WORKDIR /app
+ENV CI=1
+RUN pnpm prune --prod
 
-# Copy package files
-COPY package*.json ./
-COPY pnpm-workspace.yaml ./
-COPY packages/common/package.json packages/common/package.json
-COPY packages/common/*.js packages/common/
-
-# Install pnpm and production dependencies only
-RUN npm install -g pnpm
-RUN pnpm install --no-frozen-lockfile --prod
-
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
-
-# Change ownership of the app directory
-RUN chown -R nestjs:nodejs /app
+FROM base AS runner
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --chown=nestjs:nodejs --from=pruner /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml ./
+COPY --chown=nestjs:nodejs --from=pruner /app/node_modules ./node_modules
+COPY --chown=nestjs:nodejs --from=pruner /app/packages/common/package.json ./packages/common/
+COPY --chown=nestjs:nodejs --from=builder /app/packages/common/dist ./packages/common/dist
+COPY --chown=nestjs:nodejs --from=pruner /app/services/app/package.json ./services/app/
+COPY --chown=nestjs:nodejs --from=builder /app/services/app/dist ./services/app/dist
+WORKDIR /app/services/app
 USER nestjs
-
-# No port exposure needed - NATS only communication
-
-# Start the application (NATS microservice only)
-CMD ["node", "dist/main"]
+CMD ["node", "dist/main.js"]
